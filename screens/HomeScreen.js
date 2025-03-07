@@ -64,9 +64,14 @@ function HomeScreen() {
         const userData = userDoc.data();
         setUserName(userData.name);
         setBalance(userData.balance || 0);
-        setTransactions(userData.transactions || []);
 
         const transactions = userData.transactions || [];
+        transactions.sort(
+          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+        );
+
+        // Keep only the 7 most recent transactions
+        setTransactions(transactions.slice(0, 7));
         calculateIncomeAndExpenses(transactions);
       } else {
         await setDoc(userDocRef, {
@@ -146,10 +151,15 @@ function HomeScreen() {
         balance: newBalance,
         transactions: arrayUnion(transactionData),
       });
+      setTransactions((prev) =>
+        [...prev, transactionData]
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .slice(0, 7)
+      );
 
       setBalance(newBalance);
-      setTransactions((prev) => [...prev, transactionData]);
       calculateIncomeAndExpenses([...transactions, transactionData]);
+
       setIsModalVisible(false);
       setTransactionAmount("");
       setTransactionPurpose("");
@@ -164,17 +174,22 @@ function HomeScreen() {
 
   function renderChart() {
     console.log("Income:", income, "Expenses:", expenses);
-  
+
     // Ensure values are valid numbers before rendering the chart
-    if (isNaN(income) || isNaN(expenses) || income === undefined || expenses === undefined) {
+    if (
+      isNaN(income) ||
+      isNaN(expenses) ||
+      income === undefined ||
+      expenses === undefined
+    ) {
       return <Text style={styles.errorText}>Loading chart data...</Text>;
     }
-  
+
     const data = [
       { x: "Income", y: income },
       { x: "Expenses", y: expenses },
     ];
-  
+
     return (
       <VictoryChart domainPadding={40}>
         <VictoryAxis dependentAxis />
@@ -183,16 +198,14 @@ function HomeScreen() {
           data={data}
           style={{
             data: {
-              fill: ({ datum }) => (datum.x === "Income" ? "#4caf50" : "#f44336"),
+              fill: ({ datum }) =>
+                datum.x === "Income" ? "#4caf50" : "#f44336",
             },
           }}
         />
       </VictoryChart>
     );
   }
-  
-
-  
 
   if (authCtx.loading) {
     return (

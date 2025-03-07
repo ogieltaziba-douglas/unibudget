@@ -6,14 +6,14 @@ import Input from './Input';
 
 function AuthForm({ isLogin, onSubmit, credentialsInvalid }) {
   const [enteredEmail, setEnteredEmail] = useState('');
-  const [enteredName, setEnteredName] = useState(''); // State for name
+  const [enteredName, setEnteredName] = useState(''); 
   const [enteredConfirmEmail, setEnteredConfirmEmail] = useState('');
   const [enteredPassword, setEnteredPassword] = useState('');
   const [enteredConfirmPassword, setEnteredConfirmPassword] = useState('');
 
   const {
     email: emailIsInvalid,
-    name: nameIsInvalid, // Validation for name
+    name: nameIsInvalid, 
     confirmEmail: emailsDontMatch,
     password: passwordIsInvalid,
     confirmPassword: passwordsDontMatch,
@@ -24,7 +24,7 @@ function AuthForm({ isLogin, onSubmit, credentialsInvalid }) {
       case 'email':
         setEnteredEmail(enteredValue);
         break;
-      case 'name': // Handle name input
+      case 'name': 
         setEnteredName(enteredValue);
         break;
       case 'confirmEmail':
@@ -42,7 +42,7 @@ function AuthForm({ isLogin, onSubmit, credentialsInvalid }) {
   function submitHandler() {
     onSubmit({
       email: enteredEmail,
-      name: isLogin ? undefined : enteredName, // Include name only if not logging in
+      name: isLogin ? undefined : enteredName, 
       confirmEmail: enteredConfirmEmail,
       password: enteredPassword,
       confirmPassword: enteredConfirmPassword,
@@ -52,9 +52,9 @@ function AuthForm({ isLogin, onSubmit, credentialsInvalid }) {
   return (
     <View style={styles.form}>
       <View>
-        {!isLogin && ( // Only show the name input during signup
+        {!isLogin && ( 
           <Input
-            label="Name" // New input for name
+            label="Name" 
             onUpdateValue={updateInputValueHandler.bind(this, 'name')}
             value={enteredName}
             isInvalid={nameIsInvalid}

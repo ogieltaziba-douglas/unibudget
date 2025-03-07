@@ -58,7 +58,11 @@ function FinanceManagementScreen() {
 
       if (userDoc.exists()) {
         const userData = userDoc.data();
-        setTransactions(userData.transactions || []);
+        const sortedTransactions = (userData.transactions || []).sort(
+          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+        );
+
+        setTransactions(sortedTransactions);
       } else {
         console.log("No transactions found.");
       }
@@ -115,18 +119,24 @@ function FinanceManagementScreen() {
         transactions: arrayUnion(transactionData),
       });
 
-      // Update local state
-      if (editingTransaction) {
-        setTransactions((prev) => {
-          return prev.map((item) =>
-            item.timestamp === editingTransaction.timestamp
-              ? transactionData
-              : item
-          );
-        });
-      } else {
-        setTransactions((prev) => [...prev, transactionData]);
-      }
+      setTransactions((prev) =>
+        [...prev.filter((t) => t !== editingTransaction), transactionData].sort(
+          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+        )
+      );
+
+      // // Update local state
+      // if (editingTransaction) {
+      //   setTransactions((prev) => {
+      //     return prev.map((item) =>
+      //       item.timestamp === editingTransaction.timestamp
+      //         ? transactionData
+      //         : item
+      //     );
+      //   });
+      // } else {
+      //   setTransactions((prev) => [...prev, transactionData]);
+      // }
 
       setIsModalVisible(false);
       setTransactionAmount("");
@@ -179,12 +189,12 @@ function FinanceManagementScreen() {
           <TouchableOpacity
             style={styles.transaction}
             onPress={() => {
-              setEditingTransaction(item); 
+              setEditingTransaction(item);
               setTransactionAmount(item.amount.toString());
               setTransactionPurpose(item.purpose);
               setTransactionCategory(item.category);
               setTransactionType(item.type);
-              setIsModalVisible(true); 
+              setIsModalVisible(true);
             }}
           >
             <Text>
