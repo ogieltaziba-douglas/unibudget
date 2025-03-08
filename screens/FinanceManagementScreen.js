@@ -21,10 +21,12 @@ import {
 } from "firebase/firestore";
 import { Colors } from "../constants/styles";
 import { Picker } from "@react-native-picker/picker";
+import TransactionForm from "../components/TransactionForm";
 
 function FinanceManagementScreen() {
   const [transactions, setTransactions] = useState([]);
-  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [transactionAmount, setTransactionAmount] = useState("");
   const [transactionPurpose, setTransactionPurpose] = useState("");
   const [transactionCategory, setTransactionCategory] = useState("");
@@ -43,7 +45,6 @@ function FinanceManagementScreen() {
     "Others",
   ];
 
-  // Fetch the user's transactions
   useEffect(() => {
     if (userId) {
       fetchTransactions();
@@ -73,10 +74,8 @@ function FinanceManagementScreen() {
     }
   }
 
-  // Handle adding or editing a transaction (income or expense)
-  async function handleAddOrEditTransaction() {
+  async function handleAddTransaction() {
     const amount = parseFloat(transactionAmount);
-
     if (
       isNaN(amount) ||
       amount <= 0 ||
@@ -88,13 +87,11 @@ function FinanceManagementScreen() {
     }
 
     const transactionData = {
-      amount: amount,
+      amount,
       type: transactionType,
       purpose: transactionPurpose,
       category: transactionCategory,
-      timestamp: editingTransaction
-        ? editingTransaction.timestamp
-        : new Date().toISOString(),
+      timestamp: new Date().toISOString(),
     };
 
     try {
@@ -102,50 +99,73 @@ function FinanceManagementScreen() {
       const docSnapshot = await getDoc(userDocRef);
 
       if (!docSnapshot.exists()) {
-        console.error("User document does not exist. Initializing document...");
-        await setDoc(userDocRef, {
-          transactions: [],
-        });
-      }
-
-      if (editingTransaction) {
-        // Update the existing transaction in Firestore without modifying the timestamp
-        await updateDoc(userDocRef, {
-          transactions: arrayRemove(editingTransaction),
-        });
+        await setDoc(userDocRef, { transactions: [] });
       }
 
       await updateDoc(userDocRef, {
         transactions: arrayUnion(transactionData),
       });
 
+      setTransactions((prev) => [transactionData, ...prev]);
+
+      setIsAddModalVisible(false);
+      resetTransactionForm();
+    } catch (error) {
+      console.error("Error adding transaction:", error);
+    }
+  }
+
+  async function handleEditTransaction() {
+    if (!editingTransaction) return;
+
+    const amount = parseFloat(transactionAmount);
+    if (
+      isNaN(amount) ||
+      amount <= 0 ||
+      !transactionPurpose ||
+      !transactionCategory
+    ) {
+      console.error("Please enter a valid amount, purpose, and category.");
+      return;
+    }
+
+    const updatedTransaction = {
+      ...editingTransaction,
+      amount,
+      purpose: transactionPurpose,
+      category: transactionCategory,
+    };
+
+    try {
+      const userDocRef = doc(db, "users", userId);
+
+      await updateDoc(userDocRef, {
+        transactions: arrayRemove(editingTransaction),
+      });
+
+      await updateDoc(userDocRef, {
+        transactions: arrayUnion(updatedTransaction),
+      });
+
       setTransactions((prev) =>
-        [...prev.filter((t) => t !== editingTransaction), transactionData].sort(
-          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+        prev.map((t) =>
+          t.timestamp === editingTransaction.timestamp ? updatedTransaction : t
         )
       );
 
-      // // Update local state
-      // if (editingTransaction) {
-      //   setTransactions((prev) => {
-      //     return prev.map((item) =>
-      //       item.timestamp === editingTransaction.timestamp
-      //         ? transactionData
-      //         : item
-      //     );
-      //   });
-      // } else {
-      //   setTransactions((prev) => [...prev, transactionData]);
-      // }
-
-      setIsModalVisible(false);
-      setTransactionAmount("");
-      setTransactionPurpose("");
-      setTransactionCategory("");
-      setEditingTransaction(null);
+      setIsEditModalVisible(false);
+      resetTransactionForm();
     } catch (error) {
-      console.error("Error adding/updating transaction:", error);
+      console.error("Error editing transaction:", error);
     }
+  }
+
+  function resetTransactionForm() {
+    setTransactionAmount("");
+    setTransactionPurpose("");
+    setTransactionCategory("");
+    setTransactionType("");
+    setEditingTransaction(null);
   }
 
   if (loading) {
@@ -158,13 +178,13 @@ function FinanceManagementScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Buttons to Add Income and Expense */}
       <View style={styles.transactionButtonsContainer}>
         <TouchableOpacity
           style={[styles.transactionButton, styles.incomeButton]}
           onPress={() => {
+            resetTransactionForm();
             setTransactionType("income");
-            setIsModalVisible(true);
+            setIsAddModalVisible(true);
           }}
         >
           <Text style={styles.buttonText}>+ Add Income</Text>
@@ -172,15 +192,15 @@ function FinanceManagementScreen() {
         <TouchableOpacity
           style={[styles.transactionButton, styles.expenseButton]}
           onPress={() => {
+            resetTransactionForm();
             setTransactionType("expense");
-            setIsModalVisible(true);
+            setIsAddModalVisible(true);
           }}
         >
           <Text style={styles.buttonText}>- Add Expense</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Display Recent Transactions */}
       <Text style={styles.subtitle}>All Transactions:</Text>
       <FlatList
         data={transactions}
@@ -194,7 +214,7 @@ function FinanceManagementScreen() {
               setTransactionPurpose(item.purpose);
               setTransactionCategory(item.category);
               setTransactionType(item.type);
-              setIsModalVisible(true);
+              setIsEditModalVisible(true);
             }}
           >
             <Text>
@@ -210,53 +230,52 @@ function FinanceManagementScreen() {
         )}
       />
 
-      {/* Modal for adding or editing income/expense */}
-      <Modal visible={isModalVisible} animationType="slide" transparent>
+      {/* Add Transaction Modal */}
+      <Modal visible={isAddModalVisible} animationType="slide" transparent>
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {transactionType === "income" ? "Add Income" : "Add Expense"}
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter amount"
-              keyboardType="decimal-pad"
-              value={transactionAmount}
-              onChangeText={setTransactionAmount}
+            <Text style={styles.modalTitle}>Add {transactionType}</Text>
+            <TransactionForm
+              transactionAmount={transactionAmount}
+              transactionPurpose={transactionPurpose}
+              transactionCategory={transactionCategory}
+              transactionType={transactionType}
+              categories={
+                transactionType === "income"
+                  ? incomeCategories
+                  : expenseCategories
+              }
+              setTransactionAmount={setTransactionAmount}
+              setTransactionPurpose={setTransactionPurpose}
+              setTransactionCategory={setTransactionCategory}
+              onSubmit={handleAddTransaction}
+              onCancel={() => setIsAddModalVisible(false)}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="Enter purpose"
-              value={transactionPurpose}
-              onChangeText={setTransactionPurpose}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Transaction Modal */}
+      <Modal visible={isEditModalVisible} animationType="slide" transparent>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit {transactionType}</Text>
+            <TransactionForm
+              transactionAmount={transactionAmount}
+              transactionPurpose={transactionPurpose}
+              transactionCategory={transactionCategory}
+              transactionType={transactionType}
+              categories={
+                transactionType === "income"
+                  ? incomeCategories
+                  : expenseCategories
+              }
+              setTransactionAmount={setTransactionAmount}
+              setTransactionPurpose={setTransactionPurpose}
+              setTransactionCategory={setTransactionCategory}
+              onSubmit={handleEditTransaction}
+              onCancel={() => setIsEditModalVisible(false)}
             />
-
-            {/* Category Picker */}
-            <Picker
-              selectedValue={transactionCategory}
-              onValueChange={setTransactionCategory}
-              style={styles.input}
-            >
-              {(transactionType === "income"
-                ? incomeCategories
-                : expenseCategories
-              ).map((category) => (
-                <Picker.Item key={category} label={category} value={category} />
-              ))}
-            </Picker>
-
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={handleAddOrEditTransaction}
-            >
-              <Text style={styles.modalButtonText}>Add</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: "#ccc" }]}
-              onPress={() => setIsModalVisible(false)}
-            >
-              <Text style={styles.modalButtonText}>Cancel</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>

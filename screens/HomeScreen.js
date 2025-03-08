@@ -71,7 +71,7 @@ function HomeScreen() {
         );
 
         // Keep only the 7 most recent transactions
-        setTransactions(transactions.slice(0, 7));
+        setTransactions(transactions.slice(0, 8));
         calculateIncomeAndExpenses(transactions);
       } else {
         await setDoc(userDocRef, {
@@ -154,7 +154,7 @@ function HomeScreen() {
       setTransactions((prev) =>
         [...prev, transactionData]
           .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-          .slice(0, 7)
+          .slice(0, 8)
       );
 
       setBalance(newBalance);
@@ -175,7 +175,6 @@ function HomeScreen() {
   function renderChart() {
     console.log("Income:", income, "Expenses:", expenses);
 
-    // Ensure values are valid numbers before rendering the chart
     if (
       isNaN(income) ||
       isNaN(expenses) ||
@@ -248,7 +247,7 @@ function HomeScreen() {
         {userName ? `Welcome ${userName},` : "Welcome User,"}
       </Text>
 
-      <Text style={styles.title}>Total Balance</Text>
+      {/* <Text style={styles.title}>Total Balance</Text> */}
       <View style={styles.balanceContainer}>
         <Text style={styles.balance}>£{balance.toLocaleString()}</Text>
         <View style={styles.incomeExpenseContainer}>
