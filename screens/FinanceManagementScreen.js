@@ -3,77 +3,100 @@ import {
   FlatList,
   Modal,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
   StyleSheet,
   ActivityIndicator,
+  TouchableWithoutFeedback,
+  Alert,
 } from "react-native";
 import { AuthContext } from "../store/auth-context";
 import { db } from "../util/firebase";
 import {
   doc,
+  onSnapshot,
   getDoc,
   setDoc,
   updateDoc,
   arrayUnion,
   arrayRemove,
+  runTransaction,
 } from "firebase/firestore";
 import { Colors } from "../constants/styles";
-import { Picker } from "@react-native-picker/picker";
 import TransactionForm from "../components/TransactionForm";
 
+const incomeCategories = ["Salary", "Gift", "Other"];
+const expenseCategories = [
+  "Shopping",
+  "Food & Drinks",
+  "Rent",
+  "Bills & Utilities",
+  "Entertainment",
+  "Transportation",
+  "Travel",
+  "Savings",
+  "Investments",
+  "Others",
+];
+
 function FinanceManagementScreen() {
+  const authCtx = useContext(AuthContext);
+  const userId = authCtx.uid;
+  // States:
+  // States for transactions, balance, and loading.
   const [transactions, setTransactions] = useState([]);
+  const [balance, setBalance] = useState(0);
+  const [loading, setLoading] = useState(true);
+  // States for modals
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+  // States for Transaction form fields
   const [transactionAmount, setTransactionAmount] = useState("");
   const [transactionPurpose, setTransactionPurpose] = useState("");
   const [transactionCategory, setTransactionCategory] = useState("");
   const [transactionType, setTransactionType] = useState("");
-  const [loading, setLoading] = useState(true);
   const [editingTransaction, setEditingTransaction] = useState(null);
-  const authCtx = useContext(AuthContext);
-  const userId = authCtx.uid;
 
-  const incomeCategories = ["Salary", "Gift", "Other"];
-  const expenseCategories = [
-    "Shopping",
-    "Food & drinks",
-    "Bills & Utilities",
-    "Entertainment",
-    "Others",
-  ];
-
+  // Subscribe to the user document in Firestore to get transactions and balance.
   useEffect(() => {
-    if (userId) {
-      fetchTransactions();
-    }
+    if (!userId) return;
+    setLoading(true);
+    const userDocRef = doc(db, "users", userId);
+    const unsubscribe = onSnapshot(
+      userDocRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          const sortedTransactions = (data.transactions || []).sort(
+            (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+          );
+          setTransactions(sortedTransactions);
+          setBalance(data.balance || 0);
+        } else {
+          setDoc(userDocRef, { transactions: [], balance: 0 })
+            .catch((err) => console.error("Error creating user document:", err));
+          setTransactions([]);
+          setBalance(0);
+        }
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching transactions:", error);
+        setLoading(false);
+      }
+    );
+    return () => unsubscribe();
   }, [userId]);
 
-  async function fetchTransactions() {
-    setLoading(true);
-    try {
-      const userDocRef = doc(db, "users", userId);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const sortedTransactions = (userData.transactions || []).sort(
-          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-        );
-
-        setTransactions(sortedTransactions);
-      } else {
-        console.log("No transactions found.");
-      }
-    } catch (error) {
-      console.error("Error fetching transactions:", error);
-    } finally {
-      setLoading(false);
-    }
+  function resetTransactionForm() {
+    setTransactionAmount("");
+    setTransactionPurpose("");
+    setTransactionCategory("");
+    setTransactionType("");
+    setEditingTransaction(null);
   }
 
+  // Add transaction handler
   async function handleAddTransaction() {
     const amount = parseFloat(transactionAmount);
     if (
@@ -85,7 +108,6 @@ function FinanceManagementScreen() {
       console.error("Please enter a valid amount, purpose, and category.");
       return;
     }
-
     const transactionData = {
       amount,
       type: transactionType,
@@ -96,18 +118,23 @@ function FinanceManagementScreen() {
 
     try {
       const userDocRef = doc(db, "users", userId);
-      const docSnapshot = await getDoc(userDocRef);
-
-      if (!docSnapshot.exists()) {
-        await setDoc(userDocRef, { transactions: [] });
-      }
-
-      await updateDoc(userDocRef, {
-        transactions: arrayUnion(transactionData),
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userDocRef);
+        let currentBalance = 0;
+        if (!userDoc.exists()) {
+          transaction.set(userDocRef, { transactions: [], balance: 0 });
+        } else {
+          currentBalance = userDoc.data().balance || 0;
+        }
+        const newBalance =
+          transactionType === "income"
+            ? currentBalance + amount
+            : currentBalance - amount;
+        transaction.update(userDocRef, {
+          transactions: arrayUnion(transactionData),
+          balance: newBalance,
+        });
       });
-
-      setTransactions((prev) => [transactionData, ...prev]);
-
       setIsAddModalVisible(false);
       resetTransactionForm();
     } catch (error) {
@@ -115,9 +142,9 @@ function FinanceManagementScreen() {
     }
   }
 
+  // Edit transaction handler
   async function handleEditTransaction() {
     if (!editingTransaction) return;
-
     const amount = parseFloat(transactionAmount);
     if (
       isNaN(amount) ||
@@ -128,7 +155,6 @@ function FinanceManagementScreen() {
       console.error("Please enter a valid amount, purpose, and category.");
       return;
     }
-
     const updatedTransaction = {
       ...editingTransaction,
       amount,
@@ -138,21 +164,24 @@ function FinanceManagementScreen() {
 
     try {
       const userDocRef = doc(db, "users", userId);
-
-      await updateDoc(userDocRef, {
-        transactions: arrayRemove(editingTransaction),
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userDocRef);
+        const currentBalance = userDoc.data().balance || 0;
+        const oldEffect =
+          editingTransaction.type === "income"
+            ? editingTransaction.amount
+            : -editingTransaction.amount;
+        const newEffect = transactionType === "income" ? amount : -amount;
+        const diff = newEffect - oldEffect;
+        const newBalance = currentBalance + diff;
+        transaction.update(userDocRef, {
+          transactions: arrayRemove(editingTransaction),
+        });
+        transaction.update(userDocRef, {
+          transactions: arrayUnion(updatedTransaction),
+          balance: newBalance,
+        });
       });
-
-      await updateDoc(userDocRef, {
-        transactions: arrayUnion(updatedTransaction),
-      });
-
-      setTransactions((prev) =>
-        prev.map((t) =>
-          t.timestamp === editingTransaction.timestamp ? updatedTransaction : t
-        )
-      );
-
       setIsEditModalVisible(false);
       resetTransactionForm();
     } catch (error) {
@@ -160,12 +189,29 @@ function FinanceManagementScreen() {
     }
   }
 
-  function resetTransactionForm() {
-    setTransactionAmount("");
-    setTransactionPurpose("");
-    setTransactionCategory("");
-    setTransactionType("");
-    setEditingTransaction(null);
+  // Delete transaction handler
+  async function handleDeleteTransaction() {
+    if (!editingTransaction) return;
+    try {
+      const userDocRef = doc(db, "users", userId);
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userDocRef);
+        const currentBalance = userDoc.data().balance || 0;
+        const effect =
+          editingTransaction.type === "income"
+            ? editingTransaction.amount
+            : -editingTransaction.amount;
+        const newBalance = currentBalance - effect;
+        transaction.update(userDocRef, {
+          transactions: arrayRemove(editingTransaction),
+          balance: newBalance,
+        });
+      });
+      setIsEditModalVisible(false);
+      resetTransactionForm();
+    } catch (error) {
+      console.error("Error deleting transaction:", error);
+    }
   }
 
   if (loading) {
@@ -202,9 +248,10 @@ function FinanceManagementScreen() {
       </View>
 
       <Text style={styles.subtitle}>All Transactions:</Text>
+
       <FlatList
         data={transactions}
-        keyExtractor={(item, index) => index.toString()}
+        keyExtractor={(_, index) => index.toString()}
         renderItem={({ item }) => (
           <TouchableOpacity
             style={styles.transaction}
@@ -231,53 +278,77 @@ function FinanceManagementScreen() {
       />
 
       {/* Add Transaction Modal */}
-      <Modal visible={isAddModalVisible} animationType="slide" transparent>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add {transactionType}</Text>
-            <TransactionForm
-              transactionAmount={transactionAmount}
-              transactionPurpose={transactionPurpose}
-              transactionCategory={transactionCategory}
-              transactionType={transactionType}
-              categories={
-                transactionType === "income"
-                  ? incomeCategories
-                  : expenseCategories
-              }
-              setTransactionAmount={setTransactionAmount}
-              setTransactionPurpose={setTransactionPurpose}
-              setTransactionCategory={setTransactionCategory}
-              onSubmit={handleAddTransaction}
-              onCancel={() => setIsAddModalVisible(false)}
-            />
+      <Modal
+        visible={isAddModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsAddModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setIsAddModalVisible(false)}>
+          <View style={styles.modalContainer}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Add {transactionType}</Text>
+                <TransactionForm
+                  transactionAmount={transactionAmount}
+                  transactionPurpose={transactionPurpose}
+                  transactionCategory={transactionCategory}
+                  transactionType={transactionType}
+                  categories={
+                    transactionType === "income"
+                      ? incomeCategories
+                      : expenseCategories
+                  }
+                  setTransactionAmount={setTransactionAmount}
+                  setTransactionPurpose={setTransactionPurpose}
+                  setTransactionCategory={setTransactionCategory}
+                  onSubmit={handleAddTransaction}
+                  onCancel={() => setIsAddModalVisible(false)}
+                />
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* Edit Transaction Modal */}
-      <Modal visible={isEditModalVisible} animationType="slide" transparent>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit {transactionType}</Text>
-            <TransactionForm
-              transactionAmount={transactionAmount}
-              transactionPurpose={transactionPurpose}
-              transactionCategory={transactionCategory}
-              transactionType={transactionType}
-              categories={
-                transactionType === "income"
-                  ? incomeCategories
-                  : expenseCategories
-              }
-              setTransactionAmount={setTransactionAmount}
-              setTransactionPurpose={setTransactionPurpose}
-              setTransactionCategory={setTransactionCategory}
-              onSubmit={handleEditTransaction}
-              onCancel={() => setIsEditModalVisible(false)}
-            />
+      <Modal
+        visible={isEditModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setIsEditModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setIsEditModalVisible(false)}>
+          <View style={styles.modalContainer}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Edit {transactionType}</Text>
+                <TransactionForm
+                  transactionAmount={transactionAmount}
+                  transactionPurpose={transactionPurpose}
+                  transactionCategory={transactionCategory}
+                  transactionType={transactionType}
+                  categories={
+                    transactionType === "income"
+                      ? incomeCategories
+                      : expenseCategories
+                  }
+                  setTransactionAmount={setTransactionAmount}
+                  setTransactionPurpose={setTransactionPurpose}
+                  setTransactionCategory={setTransactionCategory}
+                  onSubmit={handleEditTransaction}
+                  onCancel={() => setIsEditModalVisible(false)}
+                />
+                <TouchableOpacity
+                  style={[styles.modalButton, { backgroundColor: "#f44336" }]}
+                  onPress={handleDeleteTransaction}
+                >
+                  <Text style={styles.modalButtonText}>Delete Transaction</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
@@ -291,16 +362,15 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: "#f5f5f5",
   },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 16,
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   subtitle: {
     fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 8,
+    marginVertical: 8,
   },
   transaction: {
     flexDirection: "row",
@@ -328,7 +398,8 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     borderRadius: 8,
-    marginVertical: 10,
+    marginHorizontal: 5,
+    marginVertical: 0,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -345,9 +416,9 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
   },
   modalContent: {
     width: 300,
@@ -360,6 +431,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 16,
+    textAlign: "center",
   },
   input: {
     width: "100%",
@@ -370,7 +442,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalButton: {
-    backgroundColor: "#4caf50",
+    backgroundColor: Colors.primary500,
     padding: 12,
     borderRadius: 8,
     marginTop: 10,
@@ -381,9 +453,5 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
   },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
 });
+

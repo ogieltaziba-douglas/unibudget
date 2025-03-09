@@ -23,9 +23,14 @@ const TransactionForm = ({
   const incomeCategories = ["Salary", "Gift", "Other"];
   const expenseCategories = [
     "Shopping",
-    "Food & drinks",
+    "Food & Drinks",
+    "Rent",
     "Bills & Utilities",
     "Entertainment",
+    "Transportation",
+    "Travel",
+    "Savings",
+    "Investments",
     "Others",
   ];
 
@@ -52,7 +57,9 @@ const TransactionForm = ({
         <Picker
           selectedValue={transactionCategory}
           onValueChange={setTransactionCategory}
-          style={Platform.OS === "ios" ? styles.pickerIOS : styles.pickerAndroid}
+          style={
+            Platform.OS === "ios" ? styles.pickerIOS : styles.pickerAndroid
+          }
           mode="dropdown"
         >
           {categories.map((category) => (
@@ -76,6 +83,8 @@ const TransactionForm = ({
   );
 };
 
+export default TransactionForm;
+
 const styles = StyleSheet.create({
   formContainer: {
     width: "100%",
@@ -89,7 +98,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     backgroundColor: "#fff",
-    height: 45, 
+    height: 45,
   },
   pickerContainer: {
     width: "100%",
@@ -98,11 +107,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 16,
     backgroundColor: "#fff",
-    overflow: "hidden", 
+    overflow: "hidden",
   },
   pickerIOS: {
     width: "100%",
-    height: 200, 
+    height: 200,
   },
   pickerAndroid: {
     width: "100%",
@@ -121,5 +130,3 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
-
-export default TransactionForm;
