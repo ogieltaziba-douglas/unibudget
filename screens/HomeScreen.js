@@ -1,210 +1,130 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState, useCallback } from "react";
 import {
   FlatList,
   Modal,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
   ActivityIndicator,
+  TouchableWithoutFeedback,
+  Alert,
 } from "react-native";
-import { doc, getDoc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import {
+  doc,
+  setDoc,
+  updateDoc,
+  arrayUnion,
+  onSnapshot,
+  getDoc,
+  runTransaction,
+} from "firebase/firestore";
 import { AuthContext } from "../store/auth-context";
 import { db } from "../util/firebase";
 import { Colors } from "../constants/styles";
 import { formatDistanceToNow } from "date-fns";
 import { Picker } from "@react-native-picker/picker";
-import {
-  VictoryPie,
-  VictoryChart,
-  VictoryBar,
-  VictoryAxis,
-} from "victory-native";
+import { VictoryPie } from "victory-native";
+import TransactionForm from "../components/TransactionForm";
 
 function HomeScreen() {
+  const authCtx = useContext(AuthContext);
+  const userId = authCtx.uid;
+  // States:
+  // Core user data states
+  const [userName, setUserName] = useState("");
   const [balance, setBalance] = useState(0);
   const [income, setIncome] = useState(0);
   const [expenses, setExpenses] = useState(0);
+  // Transaction data states
   const [transactions, setTransactions] = useState([]);
-  const [userName, setUserName] = useState("");
+  // Modal states
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [transactionAmount, setTransactionAmount] = useState("");
+  const [isChartModalVisible, setChartModalVisible] = useState(false);
+  // Transaction form states
   const [transactionType, setTransactionType] = useState("");
+  const [transactionAmount, setTransactionAmount] = useState("");
   const [transactionPurpose, setTransactionPurpose] = useState("");
   const [transactionCategory, setTransactionCategory] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  // Define income and expense categories as simple strings with correct casing
+  const incomeCategories = ["Salary", "Gift", "Other"];
+  const expenseCategories = [
+    "Shopping",
+    "Food & Drinks",
+    "Bills & Utilities",
+    "Entertainment",
+    "Rent",
+    "Transportation",
+    "Travel",
+    "Savings",
+    "Investments",
+    "Other",
+  ];
 
-  const authCtx = useContext(AuthContext);
-  const userId = authCtx.uid;
+  const categories =
+    transactionType === "income" ? incomeCategories : expenseCategories;
 
+  // Subscribe to user document in Firestore in real time.
   useEffect(() => {
     if (!authCtx.loading && userId) {
-      fetchUserData();
-    } else if (!authCtx.loading && !userId) {
-      console.warn("Skipping fetchUserData because userId is undefined.");
+      const userDocRef = doc(db, "users", userId);
+
+      const unsubscribe = onSnapshot(
+        userDocRef,
+        (snapshot) => {
+          if (!snapshot.exists()) {
+            setDoc(userDocRef, {
+              balance: 0,
+              transactions: [],
+              name: "User",
+            }).catch((error) =>
+              console.error("Error creating user document:", error)
+            );
+            setUserName("User");
+            setBalance(0);
+            setTransactions([]);
+            setIncome(0);
+            setExpenses(0);
+            return;
+          }
+
+          const userData = snapshot.data();
+          setUserName(userData.name || "User");
+          setBalance(userData.balance || 0);
+
+          const allTransactions = userData.transactions || [];
+
+          // Sort transactions (most recent first)
+          allTransactions.sort(
+            (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+          );
+
+          // Show only 8 most recent transactions
+          setTransactions(allTransactions.slice(0, 8));
+
+          // Calculate total income & expenses
+          let totalIncome = 0;
+          let totalExpenses = 0;
+          for (const tx of allTransactions) {
+            if (tx.type === "income") {
+              totalIncome += tx.amount;
+            } else {
+              totalExpenses += tx.amount;
+            }
+          }
+          setIncome(totalIncome);
+          setExpenses(totalExpenses);
+        },
+        (error) => {
+          console.error("Error subscribing to user data:", error);
+          setErrorMessage("Failed to load user data. Please try again.");
+        }
+      );
+
+      return () => unsubscribe();
     }
   }, [authCtx.loading, userId]);
-
-  useEffect(() => {
-    if (!authCtx.loading && !userId) {
-      setBalance(0);
-      setIncome(0);
-      setExpenses(0);
-      setTransactions([]);
-    }
-  }, [authCtx.loading, userId]);
-
-  async function fetchUserData() {
-    try {
-      const userDocRef = doc(db, "users", userId);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        setUserName(userData.name);
-        setBalance(userData.balance || 0);
-
-        const transactions = userData.transactions || [];
-        transactions.sort(
-          (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-        );
-
-        // Keep only the 7 most recent transactions
-        setTransactions(transactions.slice(0, 8));
-        calculateIncomeAndExpenses(transactions);
-      } else {
-        await setDoc(userDocRef, {
-          balance: 0,
-          transactions: [],
-          name: "User",
-        });
-
-        setBalance(0);
-        setTransactions([]);
-        calculateIncomeAndExpenses([]);
-      }
-    } catch (error) {
-      setErrorMessage(
-        "An error occurred while fetching user data. Please try again."
-      );
-    }
-  }
-
-  function calculateIncomeAndExpenses(transactions) {
-    let totalIncome = 0;
-    let totalExpenses = 0;
-
-    transactions.forEach((transaction) => {
-      if (transaction.type === "income") {
-        totalIncome += transaction.amount;
-      } else {
-        totalExpenses += transaction.amount;
-      }
-    });
-
-    setIncome(totalIncome);
-    setExpenses(totalExpenses);
-  }
-
-  function openTransactionModal(type) {
-    setTransactionType(type);
-    setIsModalVisible(true);
-  }
-
-  async function handleAddTransaction() {
-    const amount = parseFloat(transactionAmount);
-
-    if (
-      isNaN(amount) ||
-      amount <= 0 ||
-      !transactionPurpose ||
-      !transactionCategory
-    ) {
-      setErrorMessage("Please enter a valid amount, purpose, and category.");
-      return;
-    }
-
-    const transactionData = {
-      amount: amount,
-      type: transactionType,
-      purpose: transactionPurpose,
-      category: transactionCategory,
-      timestamp: new Date().toISOString(),
-    };
-
-    try {
-      const userDocRef = doc(db, "users", userId);
-      const docSnapshot = await getDoc(userDocRef);
-
-      if (!docSnapshot.exists()) {
-        await setDoc(userDocRef, {
-          balance: 0,
-          transactions: [],
-        });
-      }
-
-      const newBalance =
-        transactionType === "income" ? balance + amount : balance - amount;
-
-      await updateDoc(userDocRef, {
-        balance: newBalance,
-        transactions: arrayUnion(transactionData),
-      });
-      setTransactions((prev) =>
-        [...prev, transactionData]
-          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-          .slice(0, 8)
-      );
-
-      setBalance(newBalance);
-      calculateIncomeAndExpenses([...transactions, transactionData]);
-
-      setIsModalVisible(false);
-      setTransactionAmount("");
-      setTransactionPurpose("");
-      setTransactionCategory("");
-      setErrorMessage("");
-    } catch (error) {
-      setErrorMessage(
-        "An error occurred while adding the transaction. Please try again."
-      );
-    }
-  }
-
-  function renderChart() {
-    console.log("Income:", income, "Expenses:", expenses);
-
-    if (
-      isNaN(income) ||
-      isNaN(expenses) ||
-      income === undefined ||
-      expenses === undefined
-    ) {
-      return <Text style={styles.errorText}>Loading chart data...</Text>;
-    }
-
-    const data = [
-      { x: "Income", y: income },
-      { x: "Expenses", y: expenses },
-    ];
-
-    return (
-      <VictoryChart domainPadding={40}>
-        <VictoryAxis dependentAxis />
-        <VictoryAxis />
-        <VictoryBar
-          data={data}
-          style={{
-            data: {
-              fill: ({ datum }) =>
-                datum.x === "Income" ? "#4caf50" : "#f44336",
-            },
-          }}
-        />
-      </VictoryChart>
-    );
-  }
 
   if (authCtx.loading) {
     return (
@@ -224,22 +144,94 @@ function HomeScreen() {
     );
   }
 
-  const incomeCategories = [
-    { label: "Salary", value: "Salary" },
-    { label: "Gift", value: "Gift" },
-    { label: "Other", value: "Other" },
-  ];
+  function openTransactionModal(type) {
+    setTransactionType(type);
+    setIsModalVisible(true);
+  }
 
-  const expenseCategories = [
-    { label: "Shopping", value: "Shopping" },
-    { label: "Food & Drinks", value: "Food & drinks" },
-    { label: "Bills & Utilities", value: "Bills & Utilities" },
-    { label: "Entertainment", value: "Entertainment" },
-    { label: "Others", value: "Others" },
-  ];
+  // Add transaction handler
+  async function handleAddTransaction() {
+    const amount = parseFloat(transactionAmount);
+    if (
+      isNaN(amount) ||
+      amount <= 0 ||
+      !transactionPurpose.trim() ||
+      !transactionCategory
+    ) {
+      setErrorMessage("Please enter a valid amount, purpose, and category.");
+      return;
+    }
+    const transactionData = {
+      amount,
+      type: transactionType,
+      purpose: transactionPurpose.trim(),
+      category: transactionCategory,
+      timestamp: new Date().toISOString(),
+    };
 
-  const categories =
-    transactionType === "income" ? incomeCategories : expenseCategories;
+    try {
+      const userDocRef = doc(db, "users", userId);
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userDocRef);
+        let currentBalance = 0;
+        if (!userDoc.exists()) {
+          transaction.set(userDocRef, {
+            balance: 0,
+            transactions: [],
+            name: "User",
+          });
+        } else {
+          currentBalance = userDoc.data().balance || 0;
+        }
+        const newBalance =
+          transactionType === "income"
+            ? currentBalance + amount
+            : currentBalance - amount;
+
+        transaction.update(userDocRef, {
+          balance: newBalance,
+          transactions: arrayUnion(transactionData),
+        });
+      });
+
+      setIsModalVisible(false);
+      setTransactionAmount("");
+      setTransactionPurpose("");
+      setTransactionCategory("");
+      setErrorMessage("");
+    } catch (error) {
+      console.error("Error adding transaction:", error);
+      setErrorMessage(
+        "An error occurred while adding the transaction. Please try again."
+      );
+    }
+  }
+
+  // Renders the income vs. expenses chart (VictoryPie).
+  const renderIncomeExpensePie = useCallback(() => {
+    if ((income === 0 && expenses === 0) || isNaN(income) || isNaN(expenses)) {
+      return (
+        <Text style={styles.chartInfoText}>
+          No transaction data to display yet.
+        </Text>
+      );
+    }
+    const data = [
+      { x: "Income", y: income },
+      { x: "Expenses", y: expenses },
+    ];
+    return (
+      <VictoryPie
+        data={data}
+        colorScale={["#4caf50", "#f44336"]}
+        innerRadius={50}
+        labels={({ datum }) => `${datum.x}: £${datum.y.toLocaleString()}`}
+        style={{
+          labels: { fontSize: 14, fill: "#333" },
+        }}
+      />
+    );
+  }, [income, expenses]);
 
   return (
     <View style={styles.container}>
@@ -247,21 +239,23 @@ function HomeScreen() {
         {userName ? `Welcome ${userName},` : "Welcome User,"}
       </Text>
 
-      {/* <Text style={styles.title}>Total Balance</Text> */}
-      <View style={styles.balanceContainer}>
+      {/* Balance Card */}
+      <TouchableOpacity
+        style={styles.balanceContainer}
+        onPress={() => setChartModalVisible(true)}
+        activeOpacity={0.7}
+      >
         <Text style={styles.balance}>£{balance.toLocaleString()}</Text>
         <View style={styles.incomeExpenseContainer}>
           <Text style={styles.income}>Income: £{income.toLocaleString()}</Text>
-          <Text style={styles.expense}>
-            Expenses: £{expenses.toLocaleString()}
-          </Text>
+          <Text style={styles.expense}>Expenses: £{expenses.toLocaleString()}</Text>
         </View>
-        {/* <View>
-          <Text style={styles.subtitle}>Income vs Expenses:</Text>
-          {renderChart()}
-        </View> */}
-      </View>
+        <Text style={styles.tapForChartText}>
+          Tap for Income vs Expense Chart
+        </Text>
+      </TouchableOpacity>
 
+      {/* Transaction Buttons */}
       <View style={styles.transactionButtonsContainer}>
         <TouchableOpacity
           style={[styles.transactionButton, styles.incomeButton]}
@@ -280,7 +274,7 @@ function HomeScreen() {
       <Text style={styles.subtitle}>Recent Transactions:</Text>
       <FlatList
         data={transactions}
-        keyExtractor={(item, index) => index.toString()}
+        keyExtractor={(_, index) => index.toString()}
         renderItem={({ item }) => (
           <View style={styles.transaction}>
             <Text>
@@ -293,56 +287,57 @@ function HomeScreen() {
         )}
       />
 
+      {/* Transaction Modal using TransactionForm */}
       <Modal visible={isModalVisible} animationType="slide" transparent>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {transactionType === "income" ? "Add Income" : "Add Expense"}
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Enter amount"
-              keyboardType="decimal-pad"
-              value={transactionAmount}
-              onChangeText={setTransactionAmount}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Enter purpose"
-              value={transactionPurpose}
-              onChangeText={setTransactionPurpose}
-            />
-            <Picker
-              selectedValue={transactionCategory}
-              onValueChange={setTransactionCategory}
-              style={styles.input}
-            >
-              <Picker.Item label="Select Category" value="" />
-              {categories.map((category) => (
-                <Picker.Item
-                  key={category.value}
-                  label={category.label}
-                  value={category.value}
+        <TouchableWithoutFeedback onPress={() => setIsModalVisible(false)}>
+          <View style={styles.modalContainer}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <TransactionForm
+                  transactionAmount={transactionAmount}
+                  transactionPurpose={transactionPurpose}
+                  transactionCategory={transactionCategory}
+                  transactionType={transactionType}
+                  categories={
+                    transactionType === "income"
+                      ? incomeCategories
+                      : expenseCategories
+                  }
+                  setTransactionAmount={setTransactionAmount}
+                  setTransactionPurpose={setTransactionPurpose}
+                  setTransactionCategory={setTransactionCategory}
+                  onSubmit={handleAddTransaction}
+                  onCancel={() => setIsModalVisible(false)}
                 />
-              ))}
-            </Picker>
-            {errorMessage ? (
-              <Text style={styles.errorText}>{errorMessage}</Text>
-            ) : null}
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={handleAddTransaction}
-            >
-              <Text style={styles.modalButtonText}>Add</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, { backgroundColor: "#ccc" }]}
-              onPress={() => setIsModalVisible(false)}
-            >
-              <Text style={styles.modalButtonText}>Cancel</Text>
-            </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Chart Modal */}
+      <Modal
+        visible={isChartModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setChartModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setChartModalVisible(false)}>
+          <View style={styles.chartModalContainer}>
+            <TouchableWithoutFeedback>
+              <View style={styles.chartModalContent}>
+                <Text style={styles.modalTitle}>Income vs. Expenses</Text>
+                {renderIncomeExpensePie()}
+                <TouchableOpacity
+                  style={[styles.modalButton, { marginTop: 20 }]}
+                  onPress={() => setChartModalVisible(false)}
+                >
+                  <Text style={styles.modalButtonText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
@@ -362,21 +357,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textAlign: "left",
   },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
   errorText: {
     fontSize: 16,
     color: "red",
     textAlign: "center",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 16,
+    marginBottom: 8,
   },
   balanceContainer: {
     backgroundColor: Colors.primary500,
@@ -403,6 +388,12 @@ const styles = StyleSheet.create({
   expense: {
     color: "#f44336",
     fontWeight: "bold",
+  },
+  tapForChartText: {
+    marginTop: 8,
+    color: "#fff",
+    fontStyle: "italic",
+    fontSize: 12,
   },
   transactionButtonsContainer: {
     flexDirection: "row",
@@ -450,9 +441,9 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
   },
   modalContent: {
     width: 300,
@@ -465,6 +456,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 16,
+    textAlign: "center",
   },
   input: {
     width: "100%",
@@ -486,4 +478,538 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
   },
+  chartModalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  chartModalContent: {
+    width: 320,
+    padding: 20,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  chartInfoText: {
+    fontSize: 16,
+    color: "#555",
+    marginVertical: 8,
+    textAlign: "center",
+  },
 });
+
+
+
+
+
+// import { useContext, useEffect, useState, useCallback } from "react";
+// import {
+//   FlatList,
+//   Modal,
+//   StyleSheet,
+//   Text,
+//   TextInput,
+//   TouchableOpacity,
+//   View,
+//   ActivityIndicator,
+//   TouchableWithoutFeedback,
+//   Alert,
+// } from "react-native";
+// import {
+//   doc,
+//   setDoc,
+//   updateDoc,
+//   arrayUnion,
+//   onSnapshot,
+//   getDoc,
+//   runTransaction,
+// } from "firebase/firestore";
+// import { AuthContext } from "../store/auth-context";
+// import { db } from "../util/firebase";
+// import { Colors } from "../constants/styles";
+// import { formatDistanceToNow } from "date-fns";
+// import { Picker } from "@react-native-picker/picker";
+// import { VictoryPie } from "victory-native";
+
+// function HomeScreen() {
+//   const authCtx = useContext(AuthContext);
+//   const userId = authCtx.uid;
+//   //States:
+//   // States for core user data 
+//   const [userName, setUserName] = useState("");
+//   const [balance, setBalance] = useState(0);
+//   const [income, setIncome] = useState(0);
+//   const [expenses, setExpenses] = useState(0);
+//   // States for transaction data
+//   const [transactions, setTransactions] = useState([]);
+//   // States for modals
+//   const [isModalVisible, setIsModalVisible] = useState(false);
+//   const [isChartModalVisible, setChartModalVisible] = useState(false);
+//   // State for transaction form 
+//   const [transactionType, setTransactionType] = useState("");
+//   const [transactionAmount, setTransactionAmount] = useState("");
+//   const [transactionPurpose, setTransactionPurpose] = useState("");
+//   const [transactionCategory, setTransactionCategory] = useState("");
+//   const [errorMessage, setErrorMessage] = useState("");
+
+//   const incomeCategories = [
+//     { label: "Salary", value: "Salary" },
+//     { label: "Gift", value: "Gift" },
+//     { label: "Other", value: "Other" },
+//   ];
+//   const expenseCategories = [
+//     { label: "Shopping", value: "Shopping" },
+//     { label: "Food & Drinks", value: "Food & Drinks" },
+//     { label: "Bills & Utilities", value: "Bills & Utilities" },
+//     { label: "Entertainment", value: "Entertainment" },
+//     { label: "Others", value: "Others" },
+//   ];
+
+//   const categories =
+//     transactionType === "income" ? incomeCategories : expenseCategories;
+
+//   // Subscribe to the user document in Firestore in real time.
+//   useEffect(() => {
+//     if (!authCtx.loading && userId) {
+//       const userDocRef = doc(db, "users", userId);
+//       const unsubscribe = onSnapshot(
+//         userDocRef,
+//         (snapshot) => {
+//           if (!snapshot.exists()) {
+//             setDoc(userDocRef, {
+//               balance: 0,
+//               transactions: [],
+//               name: "User",
+//             }).catch((error) =>
+//               console.error("Error creating user document:", error)
+//             );
+//             setUserName("User");
+//             setBalance(0);
+//             setTransactions([]);
+//             setIncome(0);
+//             setExpenses(0);
+//             return;
+//           }
+//           const userData = snapshot.data();
+//           setUserName(userData.name || "User");
+//           setBalance(userData.balance || 0);
+
+//           const allTransactions = userData.transactions || [];
+//           // Sort transactions 
+//           allTransactions.sort(
+//             (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
+//           );
+//           // Limit to the 8 most recent transactions
+//           const recentTransactions = allTransactions.slice(0, 8);
+//           setTransactions(recentTransactions);
+
+//           // Recalculate income and expenses totals
+//           let totalIncome = 0;
+//           let totalExpenses = 0;
+//           for (const tx of allTransactions) {
+//             if (tx.type === "income") {
+//               totalIncome += tx.amount;
+//             } else {
+//               totalExpenses += tx.amount;
+//             }
+//           }
+//           setIncome(totalIncome);
+//           setExpenses(totalExpenses);
+//         },
+//         (error) => {
+//           console.error("Error subscribing to user data:", error);
+//           setErrorMessage("Failed to load user data. Please try again.");
+//         }
+//       );
+//       return () => unsubscribe();
+//     }
+//   }, [authCtx.loading, userId]);
+
+//   // Show a loading indicator while auth is loading
+//   if (authCtx.loading) {
+//     return (
+//       <View style={styles.centered}>
+//         <ActivityIndicator size="large" color={Colors.primary500} />
+//       </View>
+//     );
+//   }
+
+//   // If userId is missing after auth loads, show an error message
+//   if (!userId) {
+//     return (
+//       <View style={styles.centered}>
+//         <Text style={styles.errorText}>
+//           Unable to load user data. Please try logging in again.
+//         </Text>
+//       </View>
+//     );
+//   }
+
+//   // Opens the transaction modal for a specific type (income or expense).
+//   function openTransactionModal(type) {
+//     setTransactionType(type);
+//     setIsModalVisible(true);
+//   }
+
+//   // Add transaction handler
+//   async function handleAddTransaction() {
+//     const amount = parseFloat(transactionAmount);
+//     if (
+//       isNaN(amount) ||
+//       amount <= 0 ||
+//       !transactionPurpose ||
+//       !transactionCategory
+//     ) {
+//       setErrorMessage("Please enter a valid amount, purpose, and category.");
+//       return;
+//     }
+//     const transactionData = {
+//       amount,
+//       type: transactionType,
+//       purpose: transactionPurpose,
+//       category: transactionCategory,
+//       timestamp: new Date().toISOString(),
+//     };
+//     try {
+//       const userDocRef = doc(db, "users", userId);
+//       await runTransaction(db, async (transaction) => {
+//         const userDoc = await transaction.get(userDocRef);
+//         let currentBalance = 0;
+//         if (!userDoc.exists()) {
+//           transaction.set(userDocRef, { balance: 0, transactions: [], name: "User" });
+//         } else {
+//           currentBalance = userDoc.data().balance || 0;
+//         }
+//         const newBalance =
+//           transactionType === "income"
+//             ? currentBalance + amount
+//             : currentBalance - amount;
+//         transaction.update(userDocRef, {
+//           balance: newBalance,
+//           transactions: arrayUnion(transactionData),
+//         });
+//       });
+//       setIsModalVisible(false);
+//       setTransactionAmount("");
+//       setTransactionPurpose("");
+//       setTransactionCategory("");
+//       setErrorMessage("");
+//     } catch (error) {
+//       console.error("Error adding transaction:", error);
+//       setErrorMessage("An error occurred while adding the transaction. Please try again.");
+//     }
+//   }
+
+//   // Renders a VictoryPie chart for income vs expenses.
+//   const renderIncomeExpensePie = useCallback(() => {
+//     if ((income === 0 && expenses === 0) || isNaN(income) || isNaN(expenses)) {
+//       return (
+//         <Text style={styles.chartInfoText}>
+//           No transaction data to display yet.
+//         </Text>
+//       );
+//     }
+//     const data = [
+//       { x: "Income", y: income },
+//       { x: "Expenses", y: expenses },
+//     ];
+//     return (
+//       <VictoryPie
+//         data={data}
+//         colorScale={["#4caf50", "#f44336"]}
+//         innerRadius={50}
+//         labels={({ datum }) => `${datum.x}: £${datum.y.toLocaleString()}`}
+//         style={{
+//           labels: { fontSize: 14, fill: "#333" },
+//         }}
+//       />
+//     );
+//   }, [income, expenses]);
+
+//   return (
+//     <View style={styles.container}>
+//       <Text style={styles.welcomeText}>
+//         {userName ? `Welcome ${userName},` : "Welcome User,"}
+//       </Text>
+
+//       {/* Balance Card */}
+//       <TouchableOpacity
+//         style={styles.balanceContainer}
+//         onPress={() => setChartModalVisible(true)}
+//         activeOpacity={0.7}
+//       >
+//         <Text style={styles.balance}>£{balance.toLocaleString()}</Text>
+//         <View style={styles.incomeExpenseContainer}>
+//           <Text style={styles.income}>Income: £{income.toLocaleString()}</Text>
+//           <Text style={styles.expense}>Expenses: £{expenses.toLocaleString()}</Text>
+//         </View>
+//         <Text style={styles.tapForChartText}>Tap for Income vs Expense Chart</Text>
+//       </TouchableOpacity>
+
+//       {/* Transaction Buttons */}
+//       <View style={styles.transactionButtonsContainer}>
+//         <TouchableOpacity
+//           style={[styles.transactionButton, styles.incomeButton]}
+//           onPress={() => openTransactionModal("income")}
+//         >
+//           <Text style={styles.buttonText}>+ Add Income</Text>
+//         </TouchableOpacity>
+//         <TouchableOpacity
+//           style={[styles.transactionButton, styles.expenseButton]}
+//           onPress={() => openTransactionModal("expense")}
+//         >
+//           <Text style={styles.buttonText}>- Add Expense</Text>
+//         </TouchableOpacity>
+//       </View>
+
+//       <Text style={styles.subtitle}>Recent Transactions:</Text>
+//       <FlatList
+//         data={transactions}
+//         keyExtractor={(_, index) => index.toString()}
+//         renderItem={({ item }) => (
+//           <View style={styles.transaction}>
+//             <Text>{item.type === "income" ? "+" : "-"}£{item.amount.toFixed(2)}</Text>
+//             <Text style={styles.timestamp}>
+//               {formatDistanceToNow(new Date(item.timestamp))} ago
+//             </Text>
+//           </View>
+//         )}
+//       />
+
+//       {/* Transaction Modal */}
+//       <Modal visible={isModalVisible} animationType="slide" transparent>
+//         <TouchableWithoutFeedback onPress={() => setIsModalVisible(false)}>
+//           <View style={styles.modalContainer}>
+//             <TouchableWithoutFeedback>
+//               <View style={styles.modalContent}>
+//                 <Text style={styles.modalTitle}>
+//                   {transactionType === "income" ? "Add Income" : "Add Expense"}
+//                 </Text>
+//                 <TextInput
+//                   style={styles.input}
+//                   placeholder="Enter amount"
+//                   keyboardType="decimal-pad"
+//                   value={transactionAmount}
+//                   onChangeText={setTransactionAmount}
+//                 />
+//                 <TextInput
+//                   style={styles.input}
+//                   placeholder="Enter purpose"
+//                   value={transactionPurpose}
+//                   onChangeText={setTransactionPurpose}
+//                 />
+//                 <Picker
+//                   selectedValue={transactionCategory}
+//                   onValueChange={setTransactionCategory}
+//                   style={styles.input}
+//                 >
+//                   <Picker.Item label="Select Category" value="" />
+//                   {categories.map((category) => (
+//                     <Picker.Item
+//                       key={category.value}
+//                       label={category.label}
+//                       value={category.value}
+//                     />
+//                   ))}
+//                 </Picker>
+//                 {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+//                 <TouchableOpacity style={styles.modalButton} onPress={handleAddTransaction}>
+//                   <Text style={styles.modalButtonText}>Add</Text>
+//                 </TouchableOpacity>
+//                 <TouchableOpacity
+//                   style={[styles.modalButton, { backgroundColor: "#ccc" }]}
+//                   onPress={() => setIsModalVisible(false)}
+//                 >
+//                   <Text style={styles.modalButtonText}>Cancel</Text>
+//                 </TouchableOpacity>
+//               </View>
+//             </TouchableWithoutFeedback>
+//           </View>
+//         </TouchableWithoutFeedback>
+//       </Modal>
+
+//       {/* Chart Modal */}
+//       <Modal
+//         visible={isChartModalVisible}
+//         animationType="slide"
+//         transparent
+//         onRequestClose={() => setChartModalVisible(false)}
+//       >
+//         <TouchableWithoutFeedback onPress={() => setChartModalVisible(false)}>
+//           <View style={styles.chartModalContainer}>
+//             <TouchableWithoutFeedback>
+//               <View style={styles.chartModalContent}>
+//                 <Text style={styles.modalTitle}>Income vs. Expenses</Text>
+//                 {renderIncomeExpensePie()}
+//                 <TouchableOpacity
+//                   style={[styles.modalButton, { marginTop: 20 }]}
+//                   onPress={() => setChartModalVisible(false)}
+//                 >
+//                   <Text style={styles.modalButtonText}>Close</Text>
+//                 </TouchableOpacity>
+//               </View>
+//             </TouchableWithoutFeedback>
+//           </View>
+//         </TouchableWithoutFeedback>
+//       </Modal>
+//     </View>
+//   );
+// }
+
+// export default HomeScreen;
+
+// const styles = StyleSheet.create({
+//   container: {
+//     flex: 1,
+//     padding: 16,
+//     backgroundColor: "#f5f5f5",
+//   },
+//   welcomeText: {
+//     fontSize: 20,
+//     fontWeight: "bold",
+//     marginBottom: 10,
+//     textAlign: "left",
+//   },
+//   errorText: {
+//     fontSize: 16,
+//     color: "red",
+//     textAlign: "center",
+//     marginBottom: 8,
+//   },
+//   balanceContainer: {
+//     backgroundColor: Colors.primary500,
+//     borderRadius: 12,
+//     padding: 24,
+//     alignItems: "center",
+//     marginBottom: 20,
+//   },
+//   balance: {
+//     fontSize: 32,
+//     fontWeight: "bold",
+//     color: "#fff",
+//   },
+//   incomeExpenseContainer: {
+//     flexDirection: "row",
+//     justifyContent: "space-around",
+//     width: "100%",
+//     marginTop: 12,
+//   },
+//   income: {
+//     color: "#4caf50",
+//     fontWeight: "bold",
+//   },
+//   expense: {
+//     color: "#f44336",
+//     fontWeight: "bold",
+//   },
+//   tapForChartText: {
+//     marginTop: 8,
+//     color: "#fff",
+//     fontStyle: "italic",
+//     fontSize: 12,
+//   },
+//   transactionButtonsContainer: {
+//     flexDirection: "row",
+//     justifyContent: "space-between",
+//     marginBottom: 20,
+//   },
+//   transactionButton: {
+//     flex: 1,
+//     padding: 12,
+//     borderRadius: 8,
+//     marginHorizontal: 8,
+//   },
+//   incomeButton: {
+//     backgroundColor: "#4caf50",
+//   },
+//   expenseButton: {
+//     backgroundColor: "#f44336",
+//   },
+//   buttonText: {
+//     color: "#fff",
+//     fontWeight: "bold",
+//     textAlign: "center",
+//   },
+//   subtitle: {
+//     fontSize: 18,
+//     fontWeight: "bold",
+//     marginBottom: 8,
+//   },
+//   transaction: {
+//     flexDirection: "row",
+//     justifyContent: "space-between",
+//     padding: 12,
+//     backgroundColor: "#fff",
+//     borderRadius: 8,
+//     marginBottom: 8,
+//     shadowColor: "#000",
+//     shadowOffset: { width: 0, height: 2 },
+//     shadowOpacity: 0.1,
+//     shadowRadius: 4,
+//     elevation: 2,
+//   },
+//   timestamp: {
+//     color: "#888",
+//     fontSize: 12,
+//   },
+//   modalContainer: {
+//     flex: 1,
+//     backgroundColor: "rgba(0,0,0,0.5)",
+//     justifyContent: "center",
+//     alignItems: "center",
+//   },
+//   modalContent: {
+//     width: 300,
+//     padding: 20,
+//     backgroundColor: "#fff",
+//     borderRadius: 12,
+//     alignItems: "center",
+//   },
+//   modalTitle: {
+//     fontSize: 20,
+//     fontWeight: "bold",
+//     marginBottom: 16,
+//     textAlign: "center",
+//   },
+//   input: {
+//     width: "100%",
+//     padding: 10,
+//     borderColor: "#ccc",
+//     borderWidth: 1,
+//     borderRadius: 8,
+//     marginBottom: 16,
+//   },
+//   modalButton: {
+//     backgroundColor: Colors.primary500,
+//     padding: 12,
+//     borderRadius: 8,
+//     marginTop: 10,
+//     width: "100%",
+//     alignItems: "center",
+//   },
+//   modalButtonText: {
+//     color: "#fff",
+//     fontWeight: "bold",
+//   },
+//   chartModalContainer: {
+//     flex: 1,
+//     backgroundColor: "rgba(0,0,0,0.5)",
+//     justifyContent: "center",
+//     alignItems: "center",
+//   },
+//   chartModalContent: {
+//     width: 320,
+//     padding: 20,
+//     backgroundColor: "#fff",
+//     borderRadius: 12,
+//     alignItems: "center",
+//   },
+//   chartInfoText: {
+//     fontSize: 16,
+//     color: "#555",
+//     marginVertical: 8,
+//     textAlign: "center",
+//   },
+// });
+
