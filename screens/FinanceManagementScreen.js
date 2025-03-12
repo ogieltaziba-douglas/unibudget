@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   TouchableWithoutFeedback,
   Alert,
+  ScrollView,
 } from "react-native";
 import { AuthContext } from "../store/auth-context";
 import { db } from "../util/firebase";
@@ -42,7 +43,6 @@ const expenseCategories = [
 function FinanceManagementScreen() {
   const authCtx = useContext(AuthContext);
   const userId = authCtx.uid;
-  // States:
   // States for transactions, balance, and loading.
   const [transactions, setTransactions] = useState([]);
   const [balance, setBalance] = useState(0);
@@ -56,6 +56,14 @@ function FinanceManagementScreen() {
   const [transactionCategory, setTransactionCategory] = useState("");
   const [transactionType, setTransactionType] = useState("");
   const [editingTransaction, setEditingTransaction] = useState(null);
+
+  // New state for filtering transactions by category.
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  // Combine the income and expense categories with an "All" option.
+  const allCategories = [
+    "All",
+    ...new Set([...incomeCategories, ...expenseCategories]),
+  ];
 
   // Subscribe to the user document in Firestore to get transactions and balance.
   useEffect(() => {
@@ -73,8 +81,9 @@ function FinanceManagementScreen() {
           setTransactions(sortedTransactions);
           setBalance(data.balance || 0);
         } else {
-          setDoc(userDocRef, { transactions: [], balance: 0 })
-            .catch((err) => console.error("Error creating user document:", err));
+          setDoc(userDocRef, { transactions: [], balance: 0 }).catch((err) =>
+            console.error("Error creating user document:", err)
+          );
           setTransactions([]);
           setBalance(0);
         }
@@ -222,6 +231,12 @@ function FinanceManagementScreen() {
     );
   }
 
+  // Filter transactions based on selected category.
+  const filteredTransactions =
+    selectedCategory === "All"
+      ? transactions
+      : transactions.filter((tx) => tx.category === selectedCategory);
+
   return (
     <View style={styles.container}>
       <View style={styles.transactionButtonsContainer}>
@@ -247,10 +262,39 @@ function FinanceManagementScreen() {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.subtitle}>All Transactions:</Text>
+      {/* Category Filter */}
+      <View style={styles.filterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {allCategories.map((category) => (
+            <TouchableOpacity
+              key={category}
+              style={[
+                styles.filterButton,
+                selectedCategory === category && styles.activeFilterButton,
+              ]}
+              onPress={() => setSelectedCategory(category)}
+            >
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  selectedCategory === category && { color: "#fff" },
+                ]}
+              >
+                {category}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      <Text style={styles.subtitle}>
+        {selectedCategory === "All"
+          ? "All Transactions:"
+          : `${selectedCategory} Transactions:`}
+      </Text>
 
       <FlatList
-        data={transactions}
+        data={filteredTransactions}
         keyExtractor={(_, index) => index.toString()}
         renderItem={({ item }) => (
           <TouchableOpacity
@@ -267,11 +311,11 @@ function FinanceManagementScreen() {
             <Text>
               {item.type === "income" ? "+" : "-"}£{item.amount.toFixed(2)}
             </Text>
-            <Text style={styles.timestamp}>
-              {new Date(item.timestamp).toLocaleString()}
-            </Text>
             <Text>
               {item.purpose} - {item.category}
+            </Text>
+            <Text style={styles.timestamp}>
+              {new Date(item.timestamp).toLocaleString()}
             </Text>
           </TouchableOpacity>
         )}
@@ -414,6 +458,23 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
   },
+  filterContainer: {
+    marginBottom: 16,
+  },
+  filterButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: "#ddd",
+    marginRight: 8,
+  },
+  activeFilterButton: {
+    backgroundColor: Colors.primary500,
+  },
+  filterButtonText: {
+    color: "#000",
+    fontWeight: "bold",
+  },
   modalContainer: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
@@ -454,4 +515,3 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
-
