@@ -62,14 +62,14 @@ function normalizeTimestamp(timestamp) {
 function BudgetManagementScreen() {
   const authCtx = useContext(AuthContext);
   const userId = authCtx.uid;
-  // State for budgets 
+  // State for budgets
   const [budgets, setBudgets] = useState([]);
   // States for user data from the main user doc
   const [userBalance, setUserBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
   // Loading state
   const [loading, setLoading] = useState(true);
-  // States for Modal 
+  // States for Modal
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   // States for Form fields for budget creation/editing
@@ -176,18 +176,24 @@ function BudgetManagementScreen() {
       return;
     }
     if (!isValidAmount(budgetAmount)) {
-      Alert.alert("Validation Error", "Enter a valid positive number for amount");
+      Alert.alert(
+        "Validation Error",
+        "Enter a valid positive number for amount"
+      );
       return;
     }
     if (parseFloat(budgetAmount) > userBalance) {
-      Alert.alert("Validation Error", "Budget amount cannot exceed your balance.");
+      Alert.alert(
+        "Validation Error",
+        "Budget amount cannot exceed your balance."
+      );
       return;
     }
     const newBudget = {
       category: budgetCategory,
       amount: parseFloat(budgetAmount),
       purpose: budgetPurpose,
-      timestamp: serverTimestamp(), 
+      timestamp: serverTimestamp(),
     };
     try {
       const budgetRef = collection(db, "users", userId, "budgets");
@@ -207,7 +213,10 @@ function BudgetManagementScreen() {
       return;
     }
     if (!isValidAmount(budgetAmount)) {
-      Alert.alert("Validation Error", "Enter a valid positive number for amount");
+      Alert.alert(
+        "Validation Error",
+        "Enter a valid positive number for amount"
+      );
       return;
     }
     try {
@@ -229,24 +238,37 @@ function BudgetManagementScreen() {
   // Delete budget handler
   async function handleDeleteBudget() {
     if (!selectedBudget) return;
-    Alert.alert("Delete Budget", "Are you sure you want to delete this budget?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const budgetRef = doc(db, "users", userId, "budgets", selectedBudget.id);
-            await deleteDoc(budgetRef);
-            setIsEditModalVisible(false);
-            resetForm();
-          } catch (error) {
-            console.error("Error deleting budget:", error);
-            Alert.alert("Error", "Failed to delete budget. Please try again.");
-          }
+    Alert.alert(
+      "Delete Budget",
+      "Are you sure you want to delete this budget?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const budgetRef = doc(
+                db,
+                "users",
+                userId,
+                "budgets",
+                selectedBudget.id
+              );
+              await deleteDoc(budgetRef);
+              setIsEditModalVisible(false);
+              resetForm();
+            } catch (error) {
+              console.error("Error deleting budget:", error);
+              Alert.alert(
+                "Error",
+                "Failed to delete budget. Please try again."
+              );
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   }
 
   function dismissModal(setModalVisibility) {
@@ -276,7 +298,10 @@ function BudgetManagementScreen() {
           data={budgets}
           keyExtractor={(item) => item.id || item.timestamp?.toString()}
           renderItem={({ item }) => {
-            const spent = getSpentForCategorySince(item.category, item.timestamp);
+            const spent = getSpentForCategorySince(
+              item.category,
+              item.timestamp
+            );
             const remaining = item.amount - spent;
             const percentUsed = (spent / item.amount) * 100;
             return (
@@ -291,8 +316,9 @@ function BudgetManagementScreen() {
                 }}
               >
                 <Text style={styles.budgetText}>
-                  {item.category} - £{item.amount}
+                  {item.purpose} - £{item.amount}
                 </Text>
+
                 <Text style={styles.budgetText}>
                   Spent: £{spent} | Remaining:{" "}
                   <Text
@@ -309,7 +335,8 @@ function BudgetManagementScreen() {
                 </Text>
                 {percentUsed >= 75 && remaining >= 0 && (
                   <Text style={styles.warningText}>
-                    Warning: You've used {Math.round(percentUsed)}% of your budget!
+                    Warning: You've used {Math.round(percentUsed)}% of your
+                    budget!
                   </Text>
                 )}
                 {remaining < 0 && (
@@ -317,7 +344,7 @@ function BudgetManagementScreen() {
                     You have exceeded your budget!
                   </Text>
                 )}
-                <Text style={styles.budgetText}>{item.purpose}</Text>
+                <Text style={styles.budgetText}>Category: {item.category}</Text>
               </TouchableOpacity>
             );
           }}
@@ -338,7 +365,9 @@ function BudgetManagementScreen() {
         transparent
         onRequestClose={() => dismissModal(setIsModalVisible)}
       >
-        <TouchableWithoutFeedback onPress={() => dismissModal(setIsModalVisible)}>
+        <TouchableWithoutFeedback
+          onPress={() => dismissModal(setIsModalVisible)}
+        >
           <View style={styles.modalContainer}>
             <TouchableWithoutFeedback>
               <View style={styles.modalContent}>
@@ -350,7 +379,11 @@ function BudgetManagementScreen() {
                 >
                   <Picker.Item label="Select Category" value="" />
                   {budgetCategories.map((category) => (
-                    <Picker.Item key={category} label={category} value={category} />
+                    <Picker.Item
+                      key={category}
+                      label={category}
+                      value={category}
+                    />
                   ))}
                 </Picker>
                 <TextInput
@@ -391,7 +424,9 @@ function BudgetManagementScreen() {
         transparent
         onRequestClose={() => dismissModal(setIsEditModalVisible)}
       >
-        <TouchableWithoutFeedback onPress={() => dismissModal(setIsEditModalVisible)}>
+        <TouchableWithoutFeedback
+          onPress={() => dismissModal(setIsEditModalVisible)}
+        >
           <View style={styles.modalContainer}>
             <TouchableWithoutFeedback>
               <View style={styles.modalContent}>
@@ -403,7 +438,11 @@ function BudgetManagementScreen() {
                 >
                   <Picker.Item label="Select Category" value="" />
                   {budgetCategories.map((category) => (
-                    <Picker.Item key={category} label={category} value={category} />
+                    <Picker.Item
+                      key={category}
+                      label={category}
+                      value={category}
+                    />
                   ))}
                 </Picker>
                 <TextInput
