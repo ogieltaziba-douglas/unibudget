@@ -43,23 +43,19 @@ const expenseCategories = [
 function FinanceManagementScreen() {
   const authCtx = useContext(AuthContext);
   const userId = authCtx.uid;
-  // States for transactions, balance, and loading.
+
   const [transactions, setTransactions] = useState([]);
   const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
-  // States for modals
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
-  // States for Transaction form fields
   const [transactionAmount, setTransactionAmount] = useState("");
   const [transactionPurpose, setTransactionPurpose] = useState("");
   const [transactionCategory, setTransactionCategory] = useState("");
   const [transactionType, setTransactionType] = useState("");
   const [editingTransaction, setEditingTransaction] = useState(null);
-
-  // New state for filtering transactions by category.
   const [selectedCategory, setSelectedCategory] = useState("All");
-  // Combine the income and expense categories with an "All" option.
+  
   const allCategories = [
     "All",
     ...new Set([...incomeCategories, ...expenseCategories]),
