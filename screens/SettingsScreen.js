@@ -21,13 +21,11 @@ function SettingsScreen() {
   const authCtx = useContext(AuthContext);
   const userId = authCtx.uid;
 
-  // Local state for user data and UI
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Modals
   const [privacyModalVisible, setPrivacyModalVisible] = useState(false);
   const [tosModalVisible, setTosModalVisible] = useState(false);
 
