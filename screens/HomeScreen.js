@@ -10,6 +10,7 @@ import {
   TouchableWithoutFeedback,
   Alert,
   Dimensions,
+  TextInput,
 } from "react-native";
 import {
   doc,
@@ -44,6 +45,8 @@ function HomeScreen() {
   const [transactionPurpose, setTransactionPurpose] = useState("");
   const [transactionCategory, setTransactionCategory] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [isBalanceModalVisible, setIsBalanceModalVisible] = useState(false);
+  const [newBalanceValue, setNewBalanceValue] = useState("");
 
   const incomeCategories = ["Salary", "Gift", "Other"];
   const expenseCategories = [
@@ -195,6 +198,67 @@ function HomeScreen() {
       setErrorMessage(
         "An error occurred while adding the transaction. Please try again."
       );
+    }
+  }
+
+  function openBalanceModal() {
+    setNewBalanceValue(""); // Clear any old input
+    setIsBalanceModalVisible(true);
+  }
+
+  function closeBalanceModal() {
+    setIsBalanceModalVisible(false);
+  }
+
+  async function handleEditBalance() {
+    const newVal = parseFloat(newBalanceValue);
+    if (isNaN(newVal)) {
+      Alert.alert(
+        "Invalid Input",
+        "Please enter a valid number for the new balance."
+      );
+      return;
+    }
+
+    const currentNet = income - expenses;
+    const differnce = newVal - currentNet;
+
+    const adjustmentTx = {
+      amount: Math.abs(differnce),
+      type: differnce >= 0 ? "income" : "expense",
+      purpose: "Balance Adjustment",
+      category: "Adjustment",
+      timestamp: new Date().toISOString(),
+    };
+
+    try {
+      const userDocRef = doc(db, "users", userId);
+      await runTransaction(db, async (transaction) => {
+        const userDoc = await transaction.get(userDocRef);
+        if (!userDoc.exists()) {
+          transaction.set(userDocRef, {
+            balance: newVal,
+            transactions: [adjustmentTx],
+            name: userName || "User",
+          });
+        } else {
+          const oldData = userDoc.data();
+          const updatedTransactions = [
+            ...(oldData.transactions || []),
+            adjustmentTx,
+          ];
+          transaction.update(userDocRef, {
+            balance: newVal,
+            transactions: updatedTransactions,
+          });
+        }
+      });
+
+      setIsBalanceModalVisible(false);
+      setNewBalanceValue("");
+    } catch (error) {
+      console.error("Error updating balance:", error);
+      Alert.alert("Error", "Could not update balance. Please try again.");
     }
   }
 
@@ -510,9 +574,17 @@ function HomeScreen() {
   return (
     <View style={styles.container}>
       {/* Greeting */}
-      <Text style={styles.welcomeText}>
+      {/* <Text style={styles.welcomeText}>
         {userName ? `Welcome ${userName},` : "Welcome User,"}
-      </Text>
+      </Text> */}
+      <View style={styles.headerRow}>
+        <Text style={styles.welcomeText}>
+          {userName ? `Welcome ${userName},` : "Welcome User,"}
+        </Text>
+        <TouchableOpacity onPress={openBalanceModal}>
+          <Text style={styles.editBalanceButtonText}>Edit Balance</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Balance Card */}
       <TouchableOpacity
@@ -552,6 +624,49 @@ function HomeScreen() {
         keyExtractor={(_, index) => index.toString()}
         renderItem={renderTransactionItem}
       />
+      {/* Edit Balance Modal */}
+      <Modal
+        visible={isBalanceModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={closeBalanceModal}
+      >
+        <TouchableWithoutFeedback onPress={closeBalanceModal}>
+          <View style={styles.modalContainer}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Set New Balance</Text>
+
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={newBalanceValue}
+                  onChangeText={setNewBalanceValue}
+                  placeholder="Enter new balance"
+                />
+
+                <View style={styles.buttonRow}>
+                  <TouchableOpacity
+                    style={styles.editmodalButton}
+                    onPress={handleEditBalance}
+                  >
+                    <Text style={styles.modalButtonText}>Save</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.editmodalButton,
+                      { backgroundColor: "#666" },
+                    ]}
+                    onPress={closeBalanceModal}
+                  >
+                    <Text style={styles.modalButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
       {/* Transaction Modal */}
       <Modal visible={isModalVisible} animationType="slide" transparent>
@@ -640,7 +755,10 @@ function HomeScreen() {
 
                 {chartModalPage === 2 && (
                   <>
-                    <Text style={styles.modalTitle}> Recent Income by Category</Text>
+                    <Text style={styles.modalTitle}>
+                      {" "}
+                      Recent Income by Category
+                    </Text>
                     {renderIncomePie()}
                     <Text style={styles.summaryText}>
                       The chart above breaks your income by categories.
@@ -675,7 +793,10 @@ function HomeScreen() {
 
                 {chartModalPage === 3 && (
                   <>
-                    <Text style={styles.modalTitle}> Recent Expenses by Category</Text>
+                    <Text style={styles.modalTitle}>
+                      {" "}
+                      Recent Expenses by Category
+                    </Text>
                     {renderExpensePie()}
                     <Text style={styles.summaryText}>
                       The chart above breaks your expense by categories.
@@ -874,6 +995,18 @@ const styles = StyleSheet.create({
     marginTop: 10,
     width: "100%",
     alignItems: "center",
+    // flex: 1,
+    // marginHorizontal: 5,
+  },
+  editmodalButton: {
+    backgroundColor: Colors.primary500,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 10,
+    width: "100%",
+    alignItems: "center",
+    flex: 1,
+    marginHorizontal: 5,
   },
   modalButtonText: {
     color: "#fff",
@@ -902,5 +1035,29 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 16,
     color: "#333",
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  editBalanceButtonText: {
+    color: Colors.primary500,
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  input: {
+    width: "100%",
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    borderRadius: 8,
+    marginVertical: 10,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    width: "100%",
   },
 });
