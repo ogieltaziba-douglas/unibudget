@@ -55,7 +55,7 @@ function FinanceManagementScreen() {
   const [transactionType, setTransactionType] = useState("");
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
-  
+
   const allCategories = [
     "All",
     ...new Set([...incomeCategories, ...expenseCategories]),

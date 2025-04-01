@@ -55,6 +55,7 @@ const TransactionForm = ({
 
       <View style={styles.pickerContainer}>
         <Picker
+          testID="category-picker"
           selectedValue={transactionCategory}
           onValueChange={setTransactionCategory}
           style={

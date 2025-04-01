@@ -13,7 +13,6 @@ import IconButton from "./components/ui/IconButton";
 import SettingsScreen from "./screens/SettingsScreen";
 import FinanceManagementScreen from "./screens/FinanceManagementScreen";
 import BudgetManagementScreen from "./screens/BudgetMangementScreen";
-import { GlobalDataProvider } from "./store/globalDataContext";
 
 const Stack = createNativeStackNavigator();
 const BottomTab = createBottomTabNavigator();
@@ -111,10 +110,10 @@ export default function App() {
     <>
       <StatusBar style="light" />
       <AuthContextProvider>
-        {/* <GlobalDataProvider> */}
-          <Navigation />
-        {/* </GlobalDataProvider> */}
+        <Navigation />
       </AuthContextProvider>
     </>
   );
 }
+
+export { Navigation };

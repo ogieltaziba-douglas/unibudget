@@ -92,14 +92,11 @@ function HomeScreen() {
           setBalance(userData.balance || 0);
 
           const allTransactions = userData.transactions || [];
-          // Sort transactions (most recent first)
           allTransactions.sort(
             (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
           );
-          // Show only 8 most recent transactions
           setTransactions(allTransactions.slice(0, 8));
 
-          // Calculate total income & expenses
           let totalIncome = 0;
           let totalExpenses = 0;
           for (const tx of allTransactions) {
@@ -202,7 +199,7 @@ function HomeScreen() {
   }
 
   function openBalanceModal() {
-    setNewBalanceValue(""); // Clear any old input
+    setNewBalanceValue(""); 
     setIsBalanceModalVisible(true);
   }
 
@@ -572,11 +569,7 @@ function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Greeting */}
-      {/* <Text style={styles.welcomeText}>
-        {userName ? `Welcome ${userName},` : "Welcome User,"}
-      </Text> */}
+    <View style={styles.container} testID="home-screen">
       <View style={styles.headerRow}>
         <Text style={styles.welcomeText}>
           {userName ? `Welcome ${userName},` : "Welcome User,"}
@@ -907,8 +900,6 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     fontSize: 12,
   },
-
-  /* Transaction Buttons */
   transactionButtonsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -995,8 +986,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
     width: "100%",
     alignItems: "center",
-    // flex: 1,
-    // marginHorizontal: 5,
   },
   editmodalButton: {
     backgroundColor: Colors.primary500,

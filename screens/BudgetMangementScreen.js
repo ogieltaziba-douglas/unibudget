@@ -26,7 +26,6 @@ import {
 import { Colors } from "../constants/styles";
 import { Picker } from "@react-native-picker/picker";
 
-/** Budget categories available for selection */
 const budgetCategories = [
   "Shopping",
   "Food & Drinks",
@@ -40,11 +39,6 @@ const budgetCategories = [
   "Others",
 ];
 
-/**
- * Helper to normalize a timestamp.
- * If the timestamp is a string, we create a new Date from it.
- * If it's a Firestore Timestamp (with a toDate method or seconds property), we convert accordingly.
- */
 function normalizeTimestamp(timestamp) {
   if (!timestamp) return null;
   if (typeof timestamp === "string") {
@@ -62,23 +56,18 @@ function normalizeTimestamp(timestamp) {
 function BudgetManagementScreen() {
   const authCtx = useContext(AuthContext);
   const userId = authCtx.uid;
-  // State for budgets
   const [budgets, setBudgets] = useState([]);
-  // States for user data from the main user doc
   const [userBalance, setUserBalance] = useState(0);
   const [transactions, setTransactions] = useState([]);
-  // Loading state
   const [loading, setLoading] = useState(true);
-  // States for Modal
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
-  // States for Form fields for budget creation/editing
   const [budgetCategory, setBudgetCategory] = useState("");
   const [budgetAmount, setBudgetAmount] = useState("");
   const [budgetPurpose, setBudgetPurpose] = useState("");
   const [selectedBudget, setSelectedBudget] = useState(null);
 
-  // Subscribe in real time to the budgets subcollection
+  // Subscribe to the budgets subcollection
   useEffect(() => {
     if (!userId) return;
     const budgetRef = collection(db, "users", userId, "budgets");
@@ -100,7 +89,7 @@ function BudgetManagementScreen() {
     return () => unsubscribeBudgets();
   }, [userId]);
 
-  // Subscribe in real time to the user document to get balance and transactions
+  // Subscribe to the user document to get balance and transactions
   useEffect(() => {
     if (!userId) return;
     const userDocRef = doc(db, "users", userId);
@@ -130,7 +119,7 @@ function BudgetManagementScreen() {
     return () => unsubscribeUser();
   }, [userId]);
 
-  // Calculate available balance (userBalance minus sum of allocated budgets)
+  // Calculate available balance
   const availableBalance = useMemo(() => {
     const totalBudgetAmount = budgets.reduce(
       (total, budget) => total + budget.amount,
@@ -152,11 +141,6 @@ function BudgetManagementScreen() {
     setSelectedBudget(null);
   }
 
-  /**
-   * Helper: Calculate the total spent for a budget category,
-   * considering only expense transactions with a timestamp
-   * on or after the budget's creation timestamp.
-   */
   function getSpentForCategorySince(category, budgetTimestamp) {
     if (!budgetTimestamp) return 0;
     const budgetDate = normalizeTimestamp(budgetTimestamp);
@@ -164,7 +148,7 @@ function BudgetManagementScreen() {
       .filter((tx) => {
         if (tx.type !== "expense" || tx.category !== category) return false;
         const txDate = normalizeTimestamp(tx.timestamp);
-        return txDate >= budgetDate; // Only count expense transactions after budget creation
+        return txDate >= budgetDate;
       })
       .reduce((sum, tx) => sum + tx.amount, 0);
   }
@@ -373,6 +357,7 @@ function BudgetManagementScreen() {
               <View style={styles.modalContent}>
                 <Text style={styles.modalTitle}>Create Budget</Text>
                 <Picker
+                  testID="budget-picker"
                   selectedValue={budgetCategory}
                   onValueChange={setBudgetCategory}
                   style={styles.input}
