@@ -68,7 +68,6 @@ function SettingsScreen() {
     return () => unsubscribe();
   }, [userId]);
 
-  // Save name handler
   const handleSaveName = async () => {
     if (!userName.trim()) {
       Alert.alert("Validation", "Please enter a name.");
@@ -145,7 +144,6 @@ function SettingsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* BOTTOM CONTENT: APP VERSION */}
       <View>
         <Text style={styles.versionText}>App Version: {APP_VERSION}</Text>
       </View>

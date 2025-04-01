@@ -63,7 +63,7 @@ function AuthContent({ isLogin, onAuthenticate }) {
   }
 
   return (
-    <View style={styles.authContent}>
+    <View style={styles.authContent} testID={isLogin ? "login-screen" : "signup-screen"}>
       <AuthForm
         isLogin={isLogin}
         onSubmit={submitHandler}
