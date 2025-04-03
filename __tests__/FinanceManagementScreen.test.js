@@ -9,6 +9,8 @@ import {
 import FinanceManagementScreen from "../screens/FinanceManagementScreen";
 import { AuthContext } from "../store/auth-context";
 
+let onSnapshotCallback;
+
 global.fakeTransactions = [
   {
     type: "income",
@@ -36,6 +38,7 @@ jest.mock("firebase/firestore", () => {
     doc: jest.fn(),
     setDoc: jest.fn(() => Promise.resolve()),
     onSnapshot: jest.fn((docRef, successCallback) => {
+      onSnapshotCallback = successCallback;
       const fakeSnapshot = {
         exists: () => true,
         data: () => ({
@@ -185,6 +188,61 @@ describe("FinanceManagementScreen", () => {
     });
   });
 
+  it("adds the new income transaction to the list", async () => {
+    const { getByText } = render(
+      <AuthContext.Provider value={authContextValue}>
+        <FinanceManagementScreen />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(getByText(/Test Income/i)).toBeTruthy();
+      expect(getByText(/Test Expense/i)).toBeTruthy();
+    });
+
+    const newSnapshotIncome = {
+      exists: () => true,
+      data: () => ({
+        name: "Test User",
+        balance: 400,
+        transactions: [
+          {
+            type: "income",
+            amount: 200,
+            purpose: "Test Income",
+            category: "Salary",
+            timestamp: new Date().toISOString(),
+          },
+          {
+            type: "income",
+            amount: 300,
+            purpose: "New Income",
+            category: "Gift",
+            timestamp: new Date().toISOString(),
+          },
+          {
+            type: "expense",
+            amount: 100,
+            purpose: "Test Expense",
+            category: "Food & Drinks",
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      }),
+      docs: [],
+    };
+
+    await act(async () => {
+      onSnapshotCallback(newSnapshotIncome);
+    });
+
+    await waitFor(() => {
+      expect(getByText(/Test Income/i)).toBeTruthy();
+      expect(getByText(/Test Expense/i)).toBeTruthy();
+      expect(getByText(/New Income/i)).toBeTruthy();
+    });
+  });
+
   it('opens the "Add Expense" modal when "- Add Expense" is pressed', async () => {
     const { getByText, getByPlaceholderText, queryByPlaceholderText } = render(
       <AuthContext.Provider value={authContextValue}>
@@ -199,48 +257,151 @@ describe("FinanceManagementScreen", () => {
     });
   });
 
-  it("opens edit modal when a transaction is pressed, allows editing and deleting", async () => {
-    const {
-      getByText,
-      getByPlaceholderText,
-      queryByPlaceholderText,
-      queryByText,
-      unmount,
-    } = render(
+  it("adds the new expense transaction to the list", async () => {
+    const { getByText } = render(
       <AuthContext.Provider value={authContextValue}>
         <FinanceManagementScreen />
       </AuthContext.Provider>
     );
+
+    await waitFor(() => {
+      expect(getByText(/Test Income/i)).toBeTruthy();
+      expect(getByText(/Test Expense/i)).toBeTruthy();
+    });
+
+    const newSnapshotIncome = {
+      exists: () => true,
+      data: () => ({
+        name: "Test User",
+        balance: 400,
+        transactions: [
+          {
+            type: "income",
+            amount: 200,
+            purpose: "Test Income",
+            category: "Salary",
+            timestamp: new Date().toISOString(),
+          },
+          {
+            type: "expense",
+            amount: 50,
+            purpose: "New Expense",
+            category: "Shopping",
+            timestamp: new Date().toISOString(),
+          },
+          {
+            type: "expense",
+            amount: 100,
+            purpose: "Test Expense",
+            category: "Food & Drinks",
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      }),
+      docs: [],
+    };
+
+    await act(async () => {
+      onSnapshotCallback(newSnapshotIncome);
+    });
+
+    await waitFor(() => {
+      expect(getByText(/Test Income/i)).toBeTruthy();
+      expect(getByText(/Test Expense/i)).toBeTruthy();
+      expect(getByText(/New Expense/i)).toBeTruthy();
+    });
+  });
+
+  it("allows editing a transaction", async () => {
+    const { getByText, getByPlaceholderText, queryByPlaceholderText } = render(
+      <AuthContext.Provider value={authContextValue}>
+        <FinanceManagementScreen />
+      </AuthContext.Provider>
+    );
+
     await waitFor(() => {
       expect(getByText(/Test Expense/i)).toBeTruthy();
     });
+
     fireEvent.press(getByText(/Test Expense/i));
     await waitFor(() => {
       expect(getByText("Edit expense")).toBeTruthy();
     });
     const amountInput = getByPlaceholderText("Enter amount");
     expect(amountInput.props.value).toBe("100");
+
     fireEvent.changeText(amountInput, "150");
     fireEvent.press(getByText("Add Expense"));
+
     await waitForElementToBeRemoved(() =>
       queryByPlaceholderText("Enter amount")
     );
+
+    await act(async () => {
+      onSnapshotCallback({
+        exists: () => true,
+        data: () => ({
+          name: "Test User",
+          balance: 100,
+          transactions: [
+            {
+              type: "income",
+              amount: 200,
+              purpose: "Test Income",
+              category: "Salary",
+              timestamp: new Date().toISOString(),
+            },
+            {
+              type: "expense",
+              amount: 150,
+              purpose: "Test Expense",
+              category: "Food & Drinks",
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        }),
+        docs: [],
+      });
+    });
+
+    fireEvent.press(getByText(/Test Expense/i));
+    await waitFor(() => {
+      expect(getByText("Edit expense")).toBeTruthy();
+    });
+    const updatedAmountInput = getByPlaceholderText("Enter amount");
+    expect(updatedAmountInput.props.value).toBe("150");
+  });
+
+  it("allows deleting a transaction", async () => {
+    const { getByText, queryByPlaceholderText, unmount } = render(
+      <AuthContext.Provider value={authContextValue}>
+        <FinanceManagementScreen />
+      </AuthContext.Provider>
+    );
+
+    await waitFor(() => {
+      expect(getByText(/Test Expense/i)).toBeTruthy();
+    });
+
     fireEvent.press(getByText(/Test Expense/i));
     await waitFor(() => {
       expect(getByText("Edit expense")).toBeTruthy();
     });
     fireEvent.press(getByText("Delete Transaction"));
+
     await waitForElementToBeRemoved(() =>
       queryByPlaceholderText("Enter amount")
     );
     unmount();
-    const { queryByText: newQueryByText } = render(
+
+    const { queryByText } = render(
       <AuthContext.Provider value={authContextValue}>
         <FinanceManagementScreen />
       </AuthContext.Provider>
     );
+
     await waitFor(() => {
-      expect(newQueryByText(/Test Expense/i)).toBeNull();
+      expect(queryByText(/Test Expense/i)).toBeNull();
     });
   });
 });

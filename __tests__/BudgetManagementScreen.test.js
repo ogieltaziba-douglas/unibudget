@@ -361,7 +361,6 @@ describe("BudgetManagementScreen", () => {
       expect(getByText(/Clothes - £300/)).toBeTruthy();
     });
 
-    // Open the edit modal and trigger deletion.
     fireEvent.press(getByText(/Clothes - £300/));
     await waitFor(() => {
       expect(getByText("Edit Budget")).toBeTruthy();

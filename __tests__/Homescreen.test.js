@@ -1,9 +1,10 @@
 import React from "react";
+import { Alert } from "react-native";
 import { render, fireEvent, waitFor, act } from "@testing-library/react-native";
 import HomeScreen from "../screens/HomeScreen";
 import { AuthContext } from "../store/auth-context";
 
-let onSnapshotCallback; 
+let onSnapshotCallback;
 
 jest.mock("firebase/firestore", () => {
   const originalModule = jest.requireActual("firebase/firestore");
@@ -103,18 +104,120 @@ describe("HomeScreen", () => {
     });
   });
 
-  it('opens the "Edit Balance" modal when the "Edit Balance" button is pressed', async () => {
+  it("updates the balance correctly when edited and adds proper transactions", async () => {
     const { getByText, getByPlaceholderText, queryByPlaceholderText } = render(
       <AuthContext.Provider value={authContextValue}>
         <HomeScreen />
       </AuthContext.Provider>
     );
 
-    expect(queryByPlaceholderText("Enter new balance")).toBeNull();
-    fireEvent.press(getByText("Edit Balance"));
+    await waitFor(() => {
+      expect(getByText("£100")).toBeTruthy();
+      expect(getByText(/Income: £200/)).toBeTruthy();
+      expect(getByText(/Expenses: £100/)).toBeTruthy();
+    });
 
+    fireEvent.press(getByText("Edit Balance"));
     await waitFor(() => {
       expect(getByPlaceholderText("Enter new balance")).toBeTruthy();
+    });
+    fireEvent.changeText(getByPlaceholderText("Enter new balance"), "150");
+    fireEvent.press(getByText("Save"));
+
+    const snapshotIncrease = {
+      exists: () => true,
+      data: () => ({
+        name: "Test User",
+        balance: 150,
+        transactions: [
+          {
+            type: "income",
+            amount: 200,
+            purpose: "Test Income",
+            category: "Salary",
+            timestamp: new Date().toISOString(),
+          },
+          {
+            type: "expense",
+            amount: 100,
+            purpose: "Test Expense",
+            category: "Food & Drinks",
+            timestamp: new Date().toISOString(),
+          },
+          {
+            type: "income",
+            amount: 50,
+            purpose: "Balance adjustment",
+            category: "Adjustment",
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      }),
+      docs: [],
+    };
+
+    await act(async () => {
+      onSnapshotCallback(snapshotIncrease);
+    });
+
+    await waitFor(() => {
+      expect(getByText("£150")).toBeTruthy();
+      expect(getByText(/Income: £250/)).toBeTruthy();
+    });
+
+    fireEvent.press(getByText("Edit Balance"));
+    await waitFor(() => {
+      expect(getByPlaceholderText("Enter new balance")).toBeTruthy();
+    });
+    fireEvent.changeText(getByPlaceholderText("Enter new balance"), "120");
+    fireEvent.press(getByText("Save"));
+
+    const snapshotDecrease = {
+      exists: () => true,
+      data: () => ({
+        name: "Test User",
+        balance: 120,
+        transactions: [
+          {
+            type: "income",
+            amount: 200,
+            purpose: "Test Income",
+            category: "Salary",
+            timestamp: new Date().toISOString(),
+          },
+          {
+            type: "expense",
+            amount: 100,
+            purpose: "Test Expense",
+            category: "Food & Drinks",
+            timestamp: new Date().toISOString(),
+          },
+          {
+            type: "income",
+            amount: 50,
+            purpose: "Balance adjustment",
+            category: "Adjustment",
+            timestamp: new Date().toISOString(),
+          },
+          {
+            type: "expense",
+            amount: 30,
+            purpose: "Balance adjustment",
+            category: "Adjustment",
+            timestamp: new Date().toISOString(),
+          },
+        ],
+      }),
+      docs: [],
+    };
+
+    await act(async () => {
+      onSnapshotCallback(snapshotDecrease);
+    });
+
+    await waitFor(() => {
+      expect(getByText("£120")).toBeTruthy();
+      expect(getByText(/Expenses: £130/)).toBeTruthy();
     });
   });
 
@@ -178,7 +281,7 @@ describe("HomeScreen", () => {
       exists: () => true,
       data: () => ({
         name: "Test User",
-        balance: 400, 
+        balance: 400,
         transactions: [
           {
             type: "income",
@@ -209,7 +312,7 @@ describe("HomeScreen", () => {
 
     await waitFor(() => {
       expect(getByText("£400")).toBeTruthy();
-      expect(getByText(/Income: £500/)).toBeTruthy(); 
+      expect(getByText(/Income: £500/)).toBeTruthy();
       expect(getByText(/Expenses: £100/)).toBeTruthy();
       expect(getByText("New Income")).toBeTruthy();
     });
@@ -232,7 +335,7 @@ describe("HomeScreen", () => {
       exists: () => true,
       data: () => ({
         name: "Test User",
-        balance: 50, 
+        balance: 50,
         transactions: [
           {
             type: "income",
@@ -261,10 +364,9 @@ describe("HomeScreen", () => {
       onSnapshotCallback(newSnapshotExpense);
     });
 
-    
     await waitFor(() => {
       expect(getByText("£50")).toBeTruthy();
-      expect(getByText(/Expenses: £150/)).toBeTruthy(); 
+      expect(getByText(/Expenses: £150/)).toBeTruthy();
       expect(getByText(/Income: £200/)).toBeTruthy();
       expect(getByText("New Expense")).toBeTruthy();
     });
