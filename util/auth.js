@@ -13,11 +13,15 @@ import {
 import { db } from "../util/firebase";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import Config from 'react-native-config';
+import Constants from "expo-constants";
+
+const { FIREBASE_API_KEY } = Constants.expoConfig.extra;
+
 
 const API_KEY = Config.FIREBASE_API_KEY;
 
 async function authenticate(mode, email, password) {
-  const url = `https://identitytoolkit.googleapis.com/v1/accounts:${mode}?key=${API_KEY}`;
+  const url = `https://identitytoolkit.googleapis.com/v1/accounts:${mode}?key=${FIREBASE_API_KEY}`;
 
   const response = await axios.post(url, {
     email: email,

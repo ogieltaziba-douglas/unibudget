@@ -2,16 +2,26 @@ import { initializeApp } from "firebase/app";
 import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore } from "firebase/firestore";
-import Config from 'react-native-config';
+import Constants from "expo-constants";
+
+const { 
+  FIREBASE_API_KEY, 
+  AUTH_DOMAIN, 
+  DATABASE_URL, 
+  PROJECT_ID, 
+  STORAGE_BUCKET, 
+  MESSAGING_SENDER_ID, 
+  APP_ID 
+} = Constants.expoConfig.extra;
 
 const firebaseConfig = {
-  apiKey: Config.FIREBASE_API_KEY,
-  authDomain: Config.AUTH_DOMAIN,
-  databaseURL: Config.DATABASE_URL,
-  projectId: Config.PROJECT_ID,
-  storageBucket: Config.STORAGE_BUCKET,
-  messagingSenderId: Config.MESSAGING_SENDER_ID,
-  appId: Config.APP_ID,
+  apiKey: FIREBASE_API_KEY,
+  authDomain: AUTH_DOMAIN,
+  databaseURL: DATABASE_URL,
+  projectId: PROJECT_ID,
+  storageBucket: STORAGE_BUCKET,
+  messagingSenderId: MESSAGING_SENDER_ID,
+  appId: APP_ID,
 };
 
 let app;

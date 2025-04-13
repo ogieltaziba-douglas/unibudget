@@ -30,6 +30,7 @@
     "@react-navigation/native-stack": "^6.11.0",
     "axios": "^1.7.7",
     "date-fns": "^4.1.0",
+    "dotenv": "^16.5.0",
     "expo": "~52.0.36",
     "expo-splash-screen": "~0.29.22",
     "expo-status-bar": "~2.0.1",
