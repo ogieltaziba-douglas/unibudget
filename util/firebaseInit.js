@@ -6,12 +6,12 @@ import Config from 'react-native-config';
 
 const firebaseConfig = {
   apiKey: Config.FIREBASE_API_KEY,
-  authDomain: "unibudget-f4825.firebaseapp.com",
-  databaseURL: "https://unibudget-f4825-default-rtdb.firebaseio.com",
-  projectId: "unibudget-f4825",
-  storageBucket: "unibudget-f4825.firebasestorage.app",
-  messagingSenderId: "705568140041",
-  appId: "1:705568140041:web:b14e647d90adce026e81d8",
+  authDomain: Config.AUTH_DOMAIN,
+  databaseURL: Config.DATABASE_URL,
+  projectId: Config.PROJECT_ID,
+  storageBucket: Config.STORAGE_BUCKET,
+  messagingSenderId: Config.MESSAGING_SENDER_ID,
+  appId: Config.APP_ID,
 };
 
 let app;
