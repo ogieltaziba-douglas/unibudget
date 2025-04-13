@@ -9,6 +9,7 @@
 - 📌 Add, edit, and delete transactions
 - 📊 View your current balance and recent spending
 - 📁 Categorise income and expenses
+- 💼 Create, manage, and delete custom budgets
 - 🔐 Sign up and login securely using Firebase Authentication
 - ☁️ Cloud data storage with Firestore
 - 🔄 Data persists across sessions
