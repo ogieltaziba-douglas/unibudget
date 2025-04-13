@@ -2,9 +2,10 @@ import { initializeApp } from "firebase/app";
 import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore } from "firebase/firestore";
+import Config from 'react-native-config';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCRmRU2DEamakBQ0XPbBP5wpCSic3gf1X8",
+  apiKey: Config.FIREBASE_API_KEY,
   authDomain: "unibudget-f4825.firebaseapp.com",
   databaseURL: "https://unibudget-f4825-default-rtdb.firebaseio.com",
   projectId: "unibudget-f4825",

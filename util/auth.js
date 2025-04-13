@@ -12,8 +12,9 @@ import {
 } from "firebase/firestore";
 import { db } from "../util/firebase";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
+import Config from 'react-native-config';
 
-const API_KEY = "AIzaSyCRmRU2DEamakBQ0XPbBP5wpCSic3gf1X8";
+const API_KEY = Config.FIREBASE_API_KEY;
 
 async function authenticate(mode, email, password) {
   const url = `https://identitytoolkit.googleapis.com/v1/accounts:${mode}?key=${API_KEY}`;
