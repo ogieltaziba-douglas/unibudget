@@ -19,7 +19,7 @@
     ],
     "moduleNameMapper": {
       "\\.(jpg|jpeg|png|gif|webp|svg)$": "<rootDir>/__mocks__/fileMock.js"
-    }
+    },
     "web": "expo start --web",
     "test": "jest"
   },
@@ -68,7 +68,7 @@
     "jest": "^29.7.0",
     "jest-expo": "^52.0.6",
     "react-test-renderer": "^18.3.1",
-    "xmlhttprequest": "^1.8.0"
+    "xmlhttprequest": "^1.8.0",
     "@babel/core": "^7.20.0",
     "@testing-library/jest-native": "^5.4.3",
     "@testing-library/react-native": "^13.2.0",
